@@ -231,6 +231,25 @@ with tab_h2h:
         h = fin[((fin["player_a"] == a) & (fin["player_b"] == b)) | ((fin["player_a"] == b) & (fin["player_b"] == a))].sort_values("start_time", ascending=False)
         aw = int(((h["player_a"] == a) & (h["winner"] == "a")).sum() + ((h["player_b"] == a) & (h["winner"] == "b")).sum())
         sa, sb = snap.set_index("player").loc[a], snap.set_index("player").loc[b]
+        sess = st.radio("Session", config.SESSIONS, horizontal=True, index=1, key="h2h_sess")
+        if a != b:
+            @st.cache_resource(show_spinner=False)
+            def _model():
+                from tt_oracle.model import Predictor
+                return Predictor.load()
+            mdl = _model()
+            if mdl is None:
+                st.caption("Model file not available on this server yet.")
+            else:
+                from tt_oracle.features import matchup_row
+                row = matchup_row(sa.rename_axis(None).to_dict() | {"player": a}, sb.to_dict() | {"player": b}, aw, len(h), sess)
+                pr = mdl.predict(row).iloc[0]
+                pr["elo_p_a"] = row["elo_p_a"].iloc[0]; pr["h2h_n"] = len(h)
+                pr["A_today_n"], pr["B_today_n"] = 0, 0
+                pr["session"], pr["venue"], pr["start_time"] = sess, "any venue", pd.Timestamp.now()
+                st.markdown(card_html(pr), unsafe_allow_html=True)
+                st.caption("Model prediction for this matchup if it were played in the chosen session today, both players "
+                           "fresh. Fatigue and same-day load are set to zero; the live Today tab uses the real schedule.")
         c1, c2, c3 = st.columns(3)
         c1.metric(f"{a} Elo", f"{sa['elo']:.0f}", f"last 10: {sa['win10']:.0%}")
         c2.metric("Head to head", f"{aw}–{len(h) - aw}")

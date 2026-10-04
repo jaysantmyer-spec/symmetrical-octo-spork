@@ -129,10 +129,41 @@ def build_features(matches: pd.DataFrame, elo_k: float | None = None) -> pd.Data
 
 
 def player_snapshot(feat: pd.DataFrame) -> pd.DataFrame:
-    """Latest known rating/form per player (from the most recent row each appears in)."""
-    a = feat[["player_a", "start_time", "A_elo", "A_win10", "A_career_n"]].rename(
-        columns={"player_a": "player", "A_elo": "elo", "A_win10": "win10", "A_career_n": "n"})
-    b = feat[["player_b", "start_time", "B_elo", "B_win10", "B_career_n"]].rename(
-        columns={"player_b": "player", "B_elo": "elo", "B_win10": "win10", "B_career_n": "n"})
+    """Latest known rating/form per player (from the most recent row each appears in), with every
+    per-side feature so the app can score any hypothetical matchup without rebuilding features."""
+    cols = {k: k for k in DIFF_FEATURES}
+    a = feat[["player_a", "start_time"] + [f"A_{k}" for k in DIFF_FEATURES]].rename(
+        columns={"player_a": "player", **{f"A_{k}": k for k in DIFF_FEATURES}})
+    b = feat[["player_b", "start_time"] + [f"B_{k}" for k in DIFF_FEATURES]].rename(
+        columns={"player_b": "player", **{f"B_{k}": k for k in DIFF_FEATURES}})
     s = pd.concat([a, b]).sort_values("start_time").groupby("player").last().reset_index()
+    s = s.rename(columns={"career_n": "n"})
     return s.sort_values("elo", ascending=False)
+
+
+def matchup_row(sa: pd.Series, sb: pd.Series, h2h_a_wins: int, h2h_n: int, session: str, now=None) -> pd.DataFrame:
+    """One feature row for a hypothetical A vs B, from two player snapshots (as used by the app)."""
+    now = pd.Timestamp.now() if now is None else pd.Timestamp(now)
+    row = {"match_id": "h2h", "post_id": 0, "date": now.normalize(), "start_time": now, "session": session,
+           "venue": "", "player_a": sa["player"], "player_b": sb["player"], "finished": False, "y": np.nan,
+           "elo_p_a": _expected(float(sa["elo"]), float(sb["elo"])), "h2h_n": h2h_n}
+    for side, s in (("A", sa), ("B", sb)):
+        for k in DIFF_FEATURES:
+            if k == "career_n":
+                v = float(s["n"])
+            elif k == "h2h_net":
+                v = (2 * h2h_a_wins - h2h_n) if side == "A" else (h2h_n - 2 * h2h_a_wins)
+            elif k == "today_n":
+                v = 0.0
+            elif k in ("hrs_since", "days_since"):
+                hrs = (now - pd.Timestamp(s["start_time"])).total_seconds() / 3600
+                v = min(hrs, 96.0) if k == "hrs_since" else min(hrs / 24.0, 30.0)
+            else:
+                v = float(s[k])
+            row[f"{side}_{k}"] = v
+    for k in DIFF_FEATURES:
+        row[f"d_{k}"] = row[f"A_{k}"] - row[f"B_{k}"]
+    for s_ in SESS:
+        row[f"sess_{s_}"] = 1.0 if session == s_ else 0.0
+    row["both_n_min"] = min(float(sa["n"]), float(sb["n"]))
+    return pd.DataFrame([row])
