@@ -190,6 +190,16 @@ def _save(tours, matches) -> dict:
         allm = pd.concat(matches, ignore_index=True)
         store.upsert(allm, config.MATCHES_CSV, "match_id")
         out["matches"] = int(len(allm))
+    # drop anything dated absurdly far in the future (title typos that slipped through earlier runs)
+    lim = pd.Timestamp.today() + pd.Timedelta(days=14)
+    t = store.read(config.TOURNAMENTS_CSV)
+    if not t.empty:
+        bad = set(t[pd.to_datetime(t["date"]) > lim]["post_id"])
+        if bad:
+            store.write(t[~t["post_id"].isin(bad)], config.TOURNAMENTS_CSV)
+            m = store.read(config.MATCHES_CSV)
+            store.write(m[~m["post_id"].isin(bad)], config.MATCHES_CSV)
+            out["dropped_future_dated"] = len(bad)
     return out
 
 

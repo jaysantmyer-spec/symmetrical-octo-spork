@@ -317,7 +317,6 @@ seq,date,session,venue,post_id,url,title,n_matches,n_finished,n_players,fetched_
 5522.0,2026-09-20,night,HSC,567486,https://www.tt-series.com/5522-result-20-09-2026-night-tournament-hsc/,5522. Result 20.09.2026 – night tournament HSC,10,10,5,2026-10-04 00:23:05.086780+00:00
 5521.0,2026-09-20,night,OSP,567242,https://www.tt-series.com/5521-result-20-09-2026-night-tournament-osp/,5521. Result 20.09.2026 – night tournament OSP,15,15,6,2026-10-04 00:23:05.096993+00:00
 5520.0,2026-09-20,night,OSP,567240,https://www.tt-series.com/5520-result-20-09-2026-night-tournament-osp2-wb/,5520. Result 20.09.2026 – night tournament OSP2 (WB),10,10,5,2026-10-04 00:23:05.106008+00:00
-5519.0,2029-09-20,evening,HSC,567237,https://www.tt-series.com/5519-result-20-09-2029-evening-tournament-hsc/,5519. Result 20.09.2029 – evening tournament HSC,15,15,6,2026-10-04 00:23:05.116314+00:00
 5518.0,2026-09-20,evening,OSP,567235,https://www.tt-series.com/5518-result-20-09-2026-evening-tournament-osp/,5518. Result 20.09.2026 – evening tournament OSP,15,15,6,2026-10-04 00:23:05.126383+00:00
 5517.0,2026-09-20,evening,OSP,567233,https://www.tt-series.com/5517-result-20-09-2026-evening-tournament-osp2-wb/,5517. Result 20.09.2026 – evening tournament OSP2 (WB),15,15,6,2026-10-04 00:23:05.136900+00:00
 5516.0,2026-09-20,afternoon,HSC,567229,https://www.tt-series.com/5516-result-20-09-2026-afternoon-tournament-hsc/,5516. Result 20.09.2026 – afternoon tournament HSC,15,15,6,2026-10-04 00:23:05.148467+00:00
