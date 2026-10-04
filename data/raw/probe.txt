@@ -1,0 +1,18 @@
+posts total=21325 pages=21325 status=200
+2022 posts via after/before: 200 [{"id":45815,"date":"2022-12-31T09:23:39","title":{"rendered":"5. Results 01.01.2023 &#8211; night tournament OSP"}},{"id":45812,"date":"2022-12-31T09:09:47","title":{"rendered":"4. Results 01.01.2023 &#8211; night tournament HSC"}},{"id":45808,"date":"2022-12-31T08:55:10","title":{"rendered":"3. Results 01.01.2023 &#8211; evening tournament OSP"}}]
+oldest posts: 200 [{"id":852,"date":"2021-02-17T07:07:10","title":{"rendered":"TT Series &#8211; hall"}},{"id":854,"date":"2021-02-17T07:09:30","title":{"rendered":"TT Series &#8211; dates"}},{"id":33131,"date":"2022-10-09T07:20:07","title":{"rendered":"988. Results 10.10.2022 &#8211; morning tournament HSC"}}]
+types: 200 []
+https://www.tt-series.com/wp-sitemap.xml: 200 1650 chars; first locs: ['https://www.tt-series.com/wp-sitemap-posts-post-1.xml', 'https://www.tt-series.com/wp-sitemap-posts-post-2.xml', 'https://www.tt-series.com/wp-sitemap-posts-post-3.xml', 'https://www.tt-series.com/wp-sitemap-posts-post-4.xml', 'https://www.tt-series.com/wp-sitemap-posts-post-5.xml']
+https://www.tt-series.com/sitemap_index.xml: 404 115255 chars; first locs: []
+https://www.tt-series.com/sitemap.xml -> EXC ('Received response with content-encoding: gzip, but failed to decode it.', error('Error -3 while decompressing data: incorrect header check'))
+https://www.tt-series.com/post-sitemap.xml: 404 115255 chars; first locs: []
+https://www.tt-series.com/?p=5748 -> EXC HTTPSConnectionPool(host='www.tt-series.com', port=443): Read timed out. (read timeout=30)
+posts/5748: 404 {"code":"rest_post_invalid_id","message":"Nieprawid\u0142owy identyfikator wpisu.","data":{"status":404}}
+https://www.tt-series.com/results-2/ -> EXC HTTPSConnectionPool(host='www.tt-series.com', port=443): Read timed out. (read timeout=30)
+STEP FAILED: AttributeError("'NoneType' object has no attribute 'status_code'")
+DK https://sportsbook-nash.draftkings.com/api/sportscontent/dkusva/v1/sports: 403 438 chars; TT hits []; ids []; head '<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don\'t have permission to access "http&#58;&#47;&#47;sportsbook&#4'
+DK https://sportsbook-nash.draftkings.com/api/sportscontent/dkusnj/v1/sports: 403 438 chars; TT hits []; ids []; head '<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don\'t have permission to access "http&#58;&#47;&#47;sportsbook&#4'
+DK https://sportsbook.draftkings.com/sites/US-SB/api/v5/eventgroups?format=json: 404 254953 chars; TT hits []; ids []; head '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8">\n    <meta http-equiv="X-UA-Compatible" content="IE=edge">\n    <meta name="viewpor'
+DK https://sportsbook-nash.draftkings.com/sites/US-SB/api/v5/eventgroups?format=json: 403 443 chars; TT hits []; ids []; head '<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don\'t have permission to access "http&#58;&#47;&#47;sportsbook&#4'
+DK https://sportsbook.draftkings.com/sites/US-SB/api/v4/featured/sports?format=json: 200 1636569 chars; TT hits ['Table Tennis', 'TT Elite Series']; ids []; head '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8">\n    <meta http-equiv="X-UA-Compatible" content="IE=edge">\n    <meta name="viewpor'
+DK https://sportsbook.draftkings.com/leagues/table-tennis/tt-elite-series: 404 254882 chars; TT hits []; ids []; head '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8">\n    <meta http-equiv="X-UA-Compatible" content="IE=edge">\n    <meta name="viewpor'
