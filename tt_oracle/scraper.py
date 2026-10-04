@@ -117,7 +117,7 @@ def parse_page(html: str, post_id: int, title: str, url: str = "", post_date: st
         seats = _standings(t)
         if len(seats) >= 4:
             break
-    rows, order = [], 0
+    rows, order, prev_minutes, day_offset = [], 0, -1, 0
     for table in tables:
         for tr in table.find_all("tr"):
             cells = [_clean(td.get_text(" ")) for td in tr.find_all(["td", "th"])]
@@ -136,10 +136,14 @@ def parse_page(html: str, post_id: int, title: str, url: str = "", post_date: st
             score = next((c for c in cells if SCORE_RX.match(c)), "")
             sa, sb = (SCORE_RX.match(score).groups() if score else (None, None))
             hh, mm = TIME_RX.match(t).groups()
+            minutes = int(hh) * 60 + int(mm)
+            if minutes < prev_minutes - 120:   # night sessions run past midnight: 23:50 -> 00:10
+                day_offset += 1
+            prev_minutes = minutes
             order += 1
             rows.append({"post_id": int(post_id), "seq": meta["seq"], "date": meta["date"], "session": meta["session"],
                          "venue": meta["venue"], "order": order,
-                         "start_time": pd.Timestamp(meta["date"]) + pd.Timedelta(hours=int(hh), minutes=int(mm)),
+                         "start_time": pd.Timestamp(meta["date"]) + pd.Timedelta(days=day_offset, minutes=minutes),
                          "player_a": a, "player_b": b,
                          "sets_a": int(sa) if sa is not None else None, "sets_b": int(sb) if sb is not None else None})
     df = pd.DataFrame(rows)
