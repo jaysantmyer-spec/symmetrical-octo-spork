@@ -24,7 +24,9 @@ import requests
 
 from . import config, store
 
+TT_ELITE_EVENT_GROUP = "208037"   # DraftKings eventGroupId for TT Elite Series (found in their page data, Oct 2026)
 V5 = "https://sportsbook.draftkings.com/sites/US-SB/api/v5/eventgroups/{gid}?format=json"
+V5_NASH = "https://sportsbook-nash.draftkings.com/sites/US-SB/api/v5/eventgroups/{gid}?format=json"
 V5_LIST = "https://sportsbook.draftkings.com/sites/US-SB/api/v5/eventgroups?format=json"
 NASH = "https://sportsbook-nash.draftkings.com/api/sportscontent/dkusva/v1/leagues/{lid}"
 NASH_SPORTS = "https://sportsbook-nash.draftkings.com/api/sportscontent/dkusva/v1/sports"
@@ -74,6 +76,9 @@ def kelly(p: float, d: float, fraction: float = 0.25) -> float:
     if b <= 0:
         return 0.0
     return max(0.0, (p * b - (1 - p)) / b * fraction)
+
+
+LAST_FETCH_LOG: list[str] = []
 
 
 # --------------------------------------------------------------------------- fetching
@@ -134,23 +139,11 @@ def _parse_nash(payload: dict) -> list[dict]:
 def fetch_dk(save_raw: bool = True) -> pd.DataFrame:
     """Try the configured / known endpoints; return a tidy table of moneylines (decimal odds)."""
     config.ensure_dirs()
-    attempts = []
-    gid, lid = os.getenv("DK_EVENT_GROUP_ID"), os.getenv("DK_LEAGUE_ID")
-    if gid:
-        attempts.append(("v5", V5.format(gid=gid), _parse_v5))
-    if lid:
-        attempts.append(("nash", NASH.format(lid=lid), _parse_nash))
-    # discovery: find table tennis in the sports/leagues listing
-    try:
-        sports = _get_json(NASH_SPORTS)
-        if save_raw:
-            (config.RAW / "dk_sports.json").write_text(json.dumps(sports)[:400000])
-        for lg in sports.get("leagues", []):
-            nm = (lg.get("name") or "").lower()
-            if "elite" in nm and "tt" in nm or "table tennis" in nm:
-                attempts.append(("nash", NASH.format(lid=lg.get("id")), _parse_nash))
-    except Exception as ex:
-        attempts.append(("note", f"sports listing failed: {ex}", None))
+    gid = os.getenv("DK_EVENT_GROUP_ID", TT_ELITE_EVENT_GROUP)
+    lid = os.getenv("DK_LEAGUE_ID", TT_ELITE_EVENT_GROUP)
+    attempts = [("v5", V5.format(gid=gid), _parse_v5), ("v5nash", V5_NASH.format(gid=gid), _parse_v5),
+                ("nash", NASH.format(lid=lid), _parse_nash),
+                ("nash-nj", NASH.replace("dkusva", "dkusnj").format(lid=lid), _parse_nash)]
     rows, log_lines = [], []
     for kind, url, parser in attempts:
         if parser is None:
@@ -166,6 +159,8 @@ def fetch_dk(save_raw: bool = True) -> pd.DataFrame:
         except Exception as ex:
             log_lines.append(f"{kind} {url}: {ex}")
     (config.RAW / "dk_fetch_log.txt").write_text("\n".join(log_lines))
+    global LAST_FETCH_LOG
+    LAST_FETCH_LOG = log_lines
     df = pd.DataFrame(rows)
     if df.empty:
         return df

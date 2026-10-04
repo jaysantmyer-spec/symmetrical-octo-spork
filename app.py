@@ -141,6 +141,22 @@ with tab_price:
     kf = c2.select_slider("Kelly fraction", options=[0.1, 0.25, 0.5], value=0.25,
                           format_func=lambda v: {0.1: "1/10", 0.25: "Quarter", 0.5: "Half"}[v])
     thr = c3.slider("Edge threshold", 0.0, 0.15, 0.05, 0.01, format="%.2f")
+    cfa, cfb = st.columns([1, 3])
+    if cfa.button("Fetch DraftKings lines now"):
+        with st.spinner("Asking DraftKings…"):
+            try:
+                res = dk.snapshot_odds()
+                if res.get("lines"):
+                    st.success(f"Got {res['lines']} TT Elite lines from DraftKings.")
+                    st.cache_data.clear()
+                    odds = store.read(config.ODDS_CSV)
+                else:
+                    st.warning("DraftKings returned no TT Elite lines from this server. Details below; the paste box still works.")
+                    st.code("\n".join(dk.LAST_FETCH_LOG) or "(no log)")
+            except Exception as ex:
+                st.error(f"Fetch failed: {ex}")
+                st.code("\n".join(dk.LAST_FETCH_LOG) or "(no log)")
+    cfb.caption("Tries DraftKings' public odds feed for league 208037 (TT Elite Series) from the app's own server.")
     with st.expander("Paste DraftKings lines (if the automatic feed has nothing)"):
         st.caption("One match per line: `Oskar Jadach -150 / Wojciech Urban +120`. Names can be last name + initial.")
         txt = st.text_area("Lines", height=120, key="paste_odds")
