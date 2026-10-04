@@ -115,14 +115,17 @@ with tab_today:
         P = P.sort_values("start_time")
         c1, c2, c3 = st.columns(3)
         c1.metric("Upcoming matches", len(P))
-        hi = P[P["confidence"].isin(["Strong", "Solid"]) & ~P["thin_history"].astype(bool)]
-        c2.metric("Strong / solid picks", len(hi))
+        ok = ~P["thin_history"].astype(bool)
+        c2.metric("75%+ picks", int(((P["pick_prob"] >= 0.75) & ok).sum()), f"{int(((P['pick_prob'] >= 0.85) & ok).sum())} at 85%+")
         c3.metric("With DraftKings line", int(P["market_p_a"].notna().sum()) if "market_p_a" in P else 0)
-        day = st.selectbox("Day", sorted(P["start_time"].dt.date.unique()))
-        only_hi = st.checkbox("Only strong / solid picks", value=False)
+        cd1, cd2 = st.columns([1, 2])
+        day = cd1.selectbox("Day", sorted(P["start_time"].dt.date.unique()))
+        min_p = cd2.radio("Minimum model probability", [0.0, 0.75, 0.85], index=1, horizontal=True,
+                          format_func=lambda v: {0.0: "All matches", 0.75: "75%+ picks", 0.85: "85%+ picks"}[v])
         view = P[P["start_time"].dt.date == day]
-        if only_hi:
-            view = view[view["confidence"].isin(["Strong", "Solid"]) & ~view["thin_history"].astype(bool)]
+        if min_p > 0:
+            view = view[(view["pick_prob"] >= min_p) & ~view["thin_history"].astype(bool)]
+        st.caption(f"{len(view)} matches shown" + (f" at {min_p:.0%}+ (players with thin history excluded)" if min_p else ""))
         for sess in config.SESSIONS:
             vs = view[view["session"] == sess]
             if vs.empty:
@@ -141,6 +144,8 @@ with tab_price:
     kf = c2.select_slider("Kelly fraction", options=[0.1, 0.25, 0.5], value=0.25,
                           format_func=lambda v: {0.1: "1/10", 0.25: "Quarter", 0.5: "Half"}[v])
     thr = c3.slider("Edge threshold", 0.0, 0.15, 0.05, 0.01, format="%.2f")
+    min_pp = st.radio("Only price picks at", [0.0, 0.75, 0.85], index=1, horizontal=True, key="price_min",
+                      format_func=lambda v: {0.0: "any probability", 0.75: "75%+", 0.85: "85%+"}[v])
     cfa, cfb = st.columns([1, 3])
     if cfa.button("Fetch DraftKings lines now"):
         with st.spinner("Asking DraftKings…"):
@@ -174,6 +179,8 @@ with tab_price:
     else:
         P = dk.attach_market(pred, odds) if not odds.empty else pred
         priced = dk.price(P, bankroll, kf, thr)
+        if min_pp > 0:
+            priced = priced[priced["p_model"] >= min_pp]
         flagged = priced[priced["bet"]].sort_values("edge", ascending=False)
         st.subheader(f"Flagged bets: {len(flagged)}")
         fmt = {"p_model": "{:.0%}", "p_market": "{:.0%}", "edge": "{:+.1%}", "ev": "{:+.2f}", "stake": "${:,.0f}"}
@@ -228,6 +235,8 @@ with tab_track:
         c3.metric("Strong / solid hit rate", f"{hi['correct'].mean():.1%}" if len(hi) else "–", f"{len(hi)} picks")
         st.dataframe(g.groupby("confidence")["correct"].agg(picks="size", hit_rate="mean").reindex(["Strong", "Solid", "Lean", "Coin flip"])
                      .style.format({"hit_rate": "{:.1%}"}))
+        t75, t85 = g[g["pick_prob"].astype(float) >= 0.75], g[g["pick_prob"].astype(float) >= 0.85]
+        st.caption(f"75%+ picks: {t75['correct'].mean():.1%} of {len(t75)} · 85%+ picks: {t85['correct'].mean():.1%} of {len(t85)}" if len(t75) else "")
         if "market_p_a" in g and g["market_p_a"].notna().sum() >= 20:
             mk = g[g["market_p_a"].notna()]
             st.caption(f"On {len(mk)} matches with a DraftKings line: model {mk['correct'].mean():.1%} vs market favourite "
@@ -241,6 +250,11 @@ with tab_track:
         c1.metric("Matches", s["matches"]); c2.metric("Accuracy", f"{s['accuracy']:.1%}")
         c3.metric("Log loss", f"{s['log_loss']:.4f}"); c4.metric("Elo-only accuracy", f"{s['elo_accuracy']:.1%}")
         st.dataframe(pd.DataFrame(s["by_confidence"]).T.reindex(["Strong", "Solid", "Lean", "Coin flip"]).style.format({"hit_rate": "{:.1%}"}))
+        pk = bt["pick_prob"] if "pick_prob" in bt else np.maximum(bt["p_a"], 1 - bt["p_a"])
+        b75, b85 = bt[pk >= 0.75], bt[pk >= 0.85]
+        k1, k2 = st.columns(2)
+        k1.metric("75%+ picks hit rate", f"{b75['correct'].mean():.1%}", f"{len(b75):,} picks")
+        k2.metric("85%+ picks hit rate", f"{b85['correct'].mean():.1%}" if len(b85) else "–", f"{len(b85):,} picks")
         st.dataframe(pipeline.calibration_table(bt).style.format({"predicted": "{:.1%}", "actual": "{:.1%}"}), hide_index=True)
 
 # --------------------------------------------------------------------------- data
