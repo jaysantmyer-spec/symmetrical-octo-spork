@@ -2,8 +2,7 @@
 
 ## 1. Pull the history (once)
 GitHub repo → **Actions** tab → **backfill history (run once)** → **Run workflow**.
-Leave start=1, end=5900 (today's tournaments are around #5806; the extra ids are simply skipped).
-This visits ~5,900 pages politely, which takes 1–2 hours. When it finishes it commits
+Leave pages=80 (100 posts per page; the archive is ~5,900 posts). It takes a few minutes. When it finishes it commits
 `data/matches.csv`, trains the first model, runs a 60-day backtest and writes the first predictions.
 
 If the run ends with few or no matches, open the run's log: the parser saves the first few raw pages to

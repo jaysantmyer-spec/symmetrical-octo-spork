@@ -18,7 +18,6 @@ MODEL_FILE = MODELS / "predictor.joblib"
 STATE_FILE = MODELS / "learning_state.json"
 
 SITE = "https://www.tt-series.com"
-FIRST_POST_ID = 1          # backfill lower bound; pages that are not tournaments are skipped
 SESSIONS = ["morning", "afternoon", "evening", "night"]
 
 DEFAULTS = {

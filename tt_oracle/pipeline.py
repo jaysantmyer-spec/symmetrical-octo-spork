@@ -149,7 +149,7 @@ def run_cycle(progress=None, scrape: bool = True, odds: bool = True) -> dict:
     out = {}
     if scrape:
         from .scraper import update
-        out["scrape"] = update(progress=progress)
+        out["scrape"] = update(pages=2, progress=progress)
     if odds:
         try:
             from .dk import snapshot_odds

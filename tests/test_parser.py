@@ -2,16 +2,19 @@ import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from tt_oracle.scraper import parse_page, parse_title
 
-html = (pathlib.Path(__file__).parent / "sample_page.html").read_text()
-meta, df = parse_page(html, "https://www.tt-series.com/?p=5767")
-assert meta["post_id"] == 5767 and str(meta["date"].date()) == "2026-10-02", meta
-assert meta["session"] == "afternoon" and meta["venue"] == "OSP", meta
-assert len(df) == 4, df
-assert df.iloc[0]["player_a"] == "Milosz Cesarz" and df.iloc[0]["player_b"] == "Krzysztof Schaniel"
-assert df.iloc[0]["winner"] == "b" and df.iloc[1]["winner"] == "a" and df.iloc[2]["winner"] == "a"
-assert not df.iloc[3]["finished"] and df.iloc[3]["winner"] is None
-assert str(df.iloc[0]["start_time"]) == "2026-10-02 11:00:00"
-assert parse_title("Results 01.05.2022 – morning tournament HSC Zuzlowa") is None or True
-t = parse_title("154. Results 01-05-2022 - morning tournament HSC")
-assert t and t["post_id"] == 154 and t["session"] == "morning"
-print("parser OK", len(df), "matches")
+# a real page saved by the first live run (April 2022, older title format, surnames in the schedule)
+html = (pathlib.Path(__file__).parent / "real_page.html").read_text(encoding="utf-8")
+meta, df = parse_page(html, 5748, "Results 23.04.2022 – morning tournament", "https://www.tt-series.com/?p=5748")
+assert meta and str(meta["date"].date()) == "2022-04-23" and meta["session"] == "morning", meta
+assert len(df) == 15, len(df)
+assert df.iloc[0]["player_a"] == "Michał Krzyżanowski" and df.iloc[0]["player_b"] == "Jakub Perek", df.iloc[0]
+assert df.iloc[0]["winner"] == "b" and df.iloc[1]["winner"] == "a"
+assert df["finished"].all() and str(df.iloc[0]["start_time"]) == "2022-04-23 07:30:00"
+# newer title format
+t = parse_title("5767. Result 2.10.2026 – afternoon tournament OSP")
+assert t and t["seq"] == 5767 and t["session"] == "afternoon" and t["venue"] == "OSP" and str(t["date"].date()) == "2026-10-02"
+# synthetic newer-style page with an unplayed match
+html2 = (pathlib.Path(__file__).parent / "sample_page.html").read_text()
+meta2, df2 = parse_page(html2, 99, "5767. Result 2.10.2026 – afternoon tournament OSP")
+assert len(df2) == 4 and not df2.iloc[3]["finished"] and df2.iloc[0]["player_a"] == "Milosz Cesarz", df2
+print("parser OK:", len(df), "real matches,", df["player_a"].nunique() + df["player_b"].nunique(), "names")

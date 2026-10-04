@@ -1,6 +1,6 @@
 """
 Headless usage (this is what the GitHub Actions workflows call):
-    python -m tt_oracle backfill --start 1 --end 5900     # pull the whole archive (hours; run once)
+    python -m tt_oracle backfill --pages 80               # pull the whole archive (minutes; run once)
     python -m tt_oracle update                            # recent + new pages
     python -m tt_oracle odds                              # DraftKings snapshot
     python -m tt_oracle train
@@ -24,9 +24,8 @@ def _p(f, m):
 def main():
     ap = argparse.ArgumentParser(prog="tt_oracle")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    b = sub.add_parser("backfill"); b.add_argument("--start", type=int, default=config.FIRST_POST_ID)
-    b.add_argument("--end", type=int, required=True); b.add_argument("--keep-raw", type=int, default=3)
-    u = sub.add_parser("update"); u.add_argument("--lookahead", type=int, default=40)
+    b = sub.add_parser("backfill"); b.add_argument("--pages", type=int, default=80); b.add_argument("--keep-raw", type=int, default=3)
+    u = sub.add_parser("update"); u.add_argument("--pages", type=int, default=2)
     sub.add_parser("odds")
     sub.add_parser("train")
     pr = sub.add_parser("predict"); pr.add_argument("--no-log", action="store_true")
@@ -38,9 +37,9 @@ def main():
     config.ensure_dirs()
 
     if a.cmd == "backfill":
-        print(json.dumps(scraper.backfill(a.start, a.end, progress=_p, keep_raw=a.keep_raw), indent=2))
+        print(json.dumps(scraper.backfill(pages=a.pages, progress=_p, keep_raw=a.keep_raw), indent=2))
     elif a.cmd == "update":
-        print(json.dumps(scraper.update(lookahead=a.lookahead, progress=_p), indent=2))
+        print(json.dumps(scraper.update(pages=a.pages, progress=_p), indent=2))
     elif a.cmd == "odds":
         from .dk import snapshot_odds
         print(json.dumps(snapshot_odds(), indent=2))
