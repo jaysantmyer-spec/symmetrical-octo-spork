@@ -1,0 +1,37 @@
+name: backfill history (run once)
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "first post id"
+        default: "1"
+      end:
+        description: "last post id"
+        default: "5900"
+permissions:
+  contents: write
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - name: Pull tournament pages
+        run: python -m tt_oracle backfill --start ${{ github.event.inputs.start }} --end ${{ github.event.inputs.end }} --keep-raw 3
+      - name: Train, backtest, predict
+        run: |
+          python -m tt_oracle train || echo "not enough data to train yet"
+          python -m tt_oracle backtest --days 60 || true
+          python -m tt_oracle odds || true
+          python -m tt_oracle predict || true
+      - name: Commit data
+        run: |
+          git config user.name "tt-oracle-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A data models
+          git commit -m "backfill ${{ github.event.inputs.start }}-${{ github.event.inputs.end }}" || echo "nothing to commit"
+          git pull --rebase origin main || true
+          git push
