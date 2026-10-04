@@ -1,0 +1,1 @@
+sports listing failed: 403 Client Error: Forbidden for url: https://sportsbook-nash.draftkings.com/api/sportscontent/dkusva/v1/sports
