@@ -24,7 +24,7 @@ def _p(f, m):
 def main():
     ap = argparse.ArgumentParser(prog="tt_oracle")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    b = sub.add_parser("backfill"); b.add_argument("--pages", type=int, default=80); b.add_argument("--keep-raw", type=int, default=3)
+    b = sub.add_parser("backfill"); b.add_argument("--pages", type=int, default=400); b.add_argument("--keep-raw", type=int, default=3)
     u = sub.add_parser("update"); u.add_argument("--pages", type=int, default=2)
     sub.add_parser("odds")
     sub.add_parser("train")

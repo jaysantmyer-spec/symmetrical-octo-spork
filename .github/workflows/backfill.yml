@@ -3,8 +3,8 @@ on:
   workflow_dispatch:
     inputs:
       pages:
-        description: "archive pages to pull (100 posts each; 80 covers everything)"
-        default: "80"
+        description: "archive pages to pull (100 posts each; stops when the archive ends)"
+        default: "400"
 permissions:
   contents: write
 jobs:

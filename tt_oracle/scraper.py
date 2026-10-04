@@ -76,14 +76,19 @@ def _full_name(s: str) -> str:
     return s
 
 
-def parse_title(title: str) -> Optional[dict]:
+def parse_title(title: str, post_date: str | None = None) -> Optional[dict]:
     m = TITLE_RX.search(_clean(title))
     if not m:
         return None
     seq, d, mth, y, session, venue = m.groups()
+    y = int(y)
+    if post_date and not (2020 <= y <= 2035):   # title typos like "5.10.5026": fall back to the post's own year
+        y = pd.Timestamp(post_date).year
     try:
-        date = datetime(int(y), int(mth), int(d)).date()
+        date = datetime(y, int(mth), int(d)).date()
     except ValueError:
+        return None
+    if post_date and abs((pd.Timestamp(date) - pd.Timestamp(post_date).normalize()).days) > 400:
         return None
     session = (session or "").lower()
     if session not in config.SESSIONS:
@@ -103,11 +108,11 @@ def _standings(table) -> dict[int, str]:
 
 def parse_page(html: str, post_id: int, title: str, url: str = "", post_date: str | None = None) -> tuple[Optional[dict], pd.DataFrame]:
     """Returns (tournament dict or None if this post isn't a tournament, matches DataFrame)."""
-    meta = parse_title(title)
+    meta = parse_title(title, post_date)
     soup = BeautifulSoup(html, "html.parser")
     if meta is None:
         h1 = soup.find("h1")
-        meta = parse_title(h1.get_text(" ")) if h1 else None
+        meta = parse_title(h1.get_text(" "), post_date) if h1 else None
     if meta is None:
         return None, pd.DataFrame()
     meta.update({"post_id": int(post_id), "url": url, "title": _clean(title)})
@@ -188,7 +193,7 @@ def _save(tours, matches) -> dict:
     return out
 
 
-def backfill(pages: int = 80, progress=None, keep_raw: int = 3) -> dict:
+def backfill(pages: int = 400, progress=None, keep_raw: int = 3) -> dict:
     """Walk the archive newest-first, 100 posts a page, until it runs out or `pages` is reached."""
     config.ensure_dirs()
     tours, matches = [], []

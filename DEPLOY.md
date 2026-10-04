@@ -2,7 +2,7 @@
 
 ## 1. Pull the history (once)
 GitHub repo → **Actions** tab → **backfill history (run once)** → **Run workflow**.
-Leave pages=80 (100 posts per page; the archive is ~5,900 posts). It takes a few minutes. When it finishes it commits
+Leave pages=400 (100 posts per page; it stops when the archive ends). It takes 20–40 minutes. When it finishes it commits
 `data/matches.csv`, trains the first model, runs a 60-day backtest and writes the first predictions.
 
 If the run ends with few or no matches, open the run's log: the parser saves the first few raw pages to
