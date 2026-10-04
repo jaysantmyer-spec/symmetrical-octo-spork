@@ -53,13 +53,25 @@ def _get(url: str, params: dict | None = None, timeout: int = 30) -> requests.Re
                         timeout=timeout)
 
 
-def fetch_posts_page(page: int, per_page: int = 100) -> list[dict]:
-    r = _get(API, {"per_page": per_page, "page": page, "orderby": "date", "order": "desc",
-                   "_fields": "id,date,link,title,content"})
-    if r.status_code == 400:   # past the last page
-        return []
-    r.raise_for_status()
-    return r.json()
+def fetch_posts_page(page: int, per_page: int = 100, after: str | None = None, before: str | None = None,
+                     retries: int = 4) -> list[dict]:
+    params = {"per_page": per_page, "page": page, "orderby": "date", "order": "desc", "_fields": "id,date,link,title,content"}
+    if after:
+        params["after"] = after
+    if before:
+        params["before"] = before
+    last = None
+    for attempt in range(retries):
+        try:
+            r = _get(API, params, timeout=60)
+            if r.status_code == 400:   # past the last page
+                return []
+            r.raise_for_status()
+            return r.json()
+        except Exception as ex:      # slow host: time-outs and 5xx happen; back off and retry
+            last = ex
+            time.sleep(3 * (attempt + 1))
+    raise RuntimeError(f"posts page {page} ({after}..{before}) failed after {retries} tries: {last}")
 
 
 # --------------------------------------------------------------------------- parsing
@@ -203,29 +215,52 @@ def _save(tours, matches) -> dict:
     return out
 
 
-def backfill(pages: int = 400, progress=None, keep_raw: int = 3) -> dict:
-    """Walk the archive newest-first, 100 posts a page, until it runs out or `pages` is reached."""
+def backfill(pages: int = 400, progress=None, keep_raw: int = 3, start: str = "2021-01-01") -> dict:
+    """Walk the archive month by month (so each window is well under the API's page limits),
+    newest first, 100 posts a request. Saves after every month so a failure keeps what it got."""
     config.ensure_dirs()
-    tours, matches = [], []
-    for page in range(1, pages + 1):
-        try:
-            posts = fetch_posts_page(page)
-        except Exception as ex:
-            log.warning("page %s failed: %s", page, ex)
-            break
-        if not posts:
-            break
-        t, m = _ingest(posts, keep_raw=keep_raw if page == 1 else 0)
-        tours += t; matches += m
+    months = pd.date_range(pd.Timestamp(start).normalize(), pd.Timestamp.today().normalize() + pd.DateOffset(months=2), freq="MS")
+    windows = [(months[i], months[i + 1]) for i in range(len(months) - 1)][::-1]
+    n_t, n_m, requests_made = 0, 0, 0
+    for k, (lo, hi) in enumerate(windows):
+        tours, matches = [], []
+        for page in range(1, 60):
+            if requests_made >= pages:
+                break
+            try:
+                posts = fetch_posts_page(page, after=lo.strftime("%Y-%m-%dT00:00:00"), before=hi.strftime("%Y-%m-%dT00:00:00"))
+            except Exception as ex:
+                log.warning("%s", ex)
+                break
+            requests_made += 1
+            if not posts:
+                break
+            t, m = _ingest(posts, keep_raw=keep_raw if (k == 0 and page == 1) else 0)
+            tours += t; matches += m
+            if len(posts) < 100:
+                break
+        if tours:
+            _save(tours, matches)
+            n_t += len(tours); n_m += sum(len(x) for x in matches)
         if progress:
-            progress(page / pages, f"page {page}: {len(tours)} tournaments, {sum(len(x) for x in matches)} matches")
-        if len(posts) < 100:
+            progress((k + 1) / len(windows), f"{lo:%Y-%m}: {len(tours)} tournaments (total {n_t} / {n_m} matches)")
+        if requests_made >= pages:
             break
-    out = _save(tours, matches)
-    out["pages"] = page
-    return out
+    return {"tournaments": n_t, "matches": n_m, "requests": requests_made}
 
 
 def update(pages: int = 2, progress=None) -> dict:
-    """Newest `pages` x 100 posts: catches new fixtures, results for recent tournaments, and corrections."""
-    return backfill(pages=pages, progress=progress, keep_raw=0)
+    """Newest posts only (last ~3 weeks): new fixtures, results for recent tournaments, corrections."""
+    config.ensure_dirs()
+    lo = (pd.Timestamp.today() - pd.Timedelta(days=21)).strftime("%Y-%m-%dT00:00:00")
+    tours, matches = [], []
+    for page in range(1, pages + 1):
+        posts = fetch_posts_page(page, after=lo)
+        if not posts:
+            break
+        t, m = _ingest(posts)
+        tours += t; matches += m
+        if len(posts) < 100:
+            break
+    return _save(tours, matches)
+
