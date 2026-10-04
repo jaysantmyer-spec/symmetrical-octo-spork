@@ -122,10 +122,24 @@ with tab_today:
         day = cd1.selectbox("Day", sorted(P["start_time"].dt.date.unique()))
         min_p = cd2.radio("Minimum model probability", [0.0, 0.75, 0.85], index=1, horizontal=True,
                           format_func=lambda v: {0.0: "All matches", 0.75: "75%+ picks", 0.85: "85%+ picks"}[v])
+        q = st.text_input("Search a player or match", placeholder="e.g. Jadach, or Jadach Urban", key="today_q")
         view = P[P["start_time"].dt.date == day]
         if min_p > 0:
             view = view[(view["pick_prob"] >= min_p) & ~view["thin_history"].astype(bool)]
-        st.caption(f"{len(view)} matches shown" + (f" at {min_p:.0%}+ (players with thin history excluded)" if min_p else ""))
+        if q.strip():
+            # every word typed must appear in one of the two names (accent-insensitive)
+            import unicodedata
+            def _fold(s): return unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode().lower()
+            words = [_fold(w) for w in q.split()]
+            both = (view["player_a"].map(_fold) + " " + view["player_b"].map(_fold))
+            view = view[both.apply(lambda s: all(w in s for w in words))]
+            if view.empty:
+                view = P[P["start_time"].dt.date == day]
+                both = (view["player_a"].map(_fold) + " " + view["player_b"].map(_fold))
+                view = view[both.apply(lambda s: all(w in s for w in words))]
+                if not view.empty:
+                    st.caption("No match at the chosen probability filter; showing all matches for that search.")
+        st.caption(f"{len(view)} matches shown" + (f" at {min_p:.0%}+ (players with thin history excluded)" if min_p and not q.strip() else ""))
         for sess in config.SESSIONS:
             vs = view[view["session"] == sess]
             if vs.empty:
@@ -181,6 +195,13 @@ with tab_price:
         priced = dk.price(P, bankroll, kf, thr)
         if min_pp > 0:
             priced = priced[priced["p_model"] >= min_pp]
+        pq = st.text_input("Search a player", placeholder="e.g. Jadach", key="price_q")
+        if pq.strip():
+            import unicodedata
+            def _fold2(s): return unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode().lower()
+            words = [_fold2(w) for w in pq.split()]
+            both = priced["player"].map(_fold2) + " " + priced["opponent"].map(_fold2)
+            priced = priced[both.apply(lambda s: all(w in s for w in words))]
         flagged = priced[priced["bet"]].sort_values("edge", ascending=False)
         st.subheader(f"Flagged bets: {len(flagged)}")
         fmt = {"p_model": "{:.0%}", "p_market": "{:.0%}", "edge": "{:+.1%}", "ev": "{:+.2f}", "stake": "${:,.0f}"}
