@@ -75,6 +75,8 @@ def predict_upcoming(pred: M.Predictor | None = None, log_to_ledger: bool = True
         store.write(P, config.PREDICTIONS_CSV)
         if log_to_ledger:
             log_predictions(P, pred.meta.get("version", ""))
+    from .features import player_snapshot
+    store.write(player_snapshot(feat), config.PLAYERS_CSV)
     return P
 
 

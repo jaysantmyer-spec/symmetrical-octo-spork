@@ -6,6 +6,7 @@ and a temperature calibration. Training rows are mirrored so the model is corner
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import json
 from dataclasses import dataclass, field
 
@@ -23,9 +24,9 @@ from .features import CONTEXT_FEATURES, DIFF_FEATURES
 
 
 def _importable(name: str) -> bool:
+    """Cheap check (no import) so the Streamlit app never pays for loading the boosting libraries."""
     try:
-        importlib.import_module(name)
-        return True
+        return importlib.util.find_spec(name) is not None
     except Exception:
         return False
 

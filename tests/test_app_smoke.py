@@ -62,3 +62,5 @@ def make_st():
 sys.modules["streamlit"] = make_st()
 runpy.run_path(str(ROOT / "app.py"), run_name="__main__")
 print("app.py executed OK, root:", os.environ.get("TT_ORACLE_ROOT", "repo"))
+import resource
+print("peak memory MB:", round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024))

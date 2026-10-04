@@ -14,7 +14,6 @@ import pandas as pd
 import streamlit as st
 
 from tt_oracle import config, dk, pipeline, store
-from tt_oracle.features import player_snapshot
 
 st.set_page_config(page_title="TT Elite Oracle", page_icon="🏓", layout="wide")
 config.ensure_dirs()
@@ -39,11 +38,21 @@ h1, h2, h3 {{ font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }}
 </style>""", unsafe_allow_html=True)
 
 
+MATCH_COLS = ["match_id", "post_id", "start_time", "session", "venue", "player_a", "player_b", "sets_a", "sets_b", "finished", "winner"]
+
+
 @st.cache_data(show_spinner=False)
 def load(sig):
-    return {"pred": store.read(config.PREDICTIONS_CSV), "matches": pipeline.load_matches(),
-            "odds": store.read(config.ODDS_CSV), "ledger": store.read(config.LEDGER_CSV),
-            "bt": store.read(config.BACKTEST_CSV), "tours": store.read(config.TOURNAMENTS_CSV)}
+    """Only what the pages show. The full history is ~300k matches; keep the app's memory small."""
+    m = pd.read_csv(config.MATCHES_CSV, usecols=MATCH_COLS, parse_dates=["start_time"]) if config.MATCHES_CSV.exists() else pd.DataFrame()
+    if not m.empty:
+        m["finished"] = m["finished"].astype(bool)
+        for c in ("session", "venue", "player_a", "player_b", "winner"):
+            m[c] = m[c].astype("category")
+    t = pd.read_csv(config.TOURNAMENTS_CSV).sort_values("post_id", ascending=False).head(60) if config.TOURNAMENTS_CSV.exists() else pd.DataFrame()
+    return {"pred": store.read(config.PREDICTIONS_CSV), "matches": m, "odds": store.read(config.ODDS_CSV),
+            "ledger": store.read(config.LEDGER_CSV), "bt": store.read(config.BACKTEST_CSV), "tours": t,
+            "players": store.read(config.PLAYERS_CSV)}
 
 
 def _sig():
@@ -84,7 +93,7 @@ with st.sidebar:
         st.warning("No data yet. The first GitHub Actions backfill hasn't run (see DEPLOY.md).")
     else:
         fin = matches[matches["finished"]]
-        st.write(f"**{len(fin):,}** matches, **{matches['player_a'].nunique():,}** players")
+        st.write(f"**{len(fin):,}** matches since {fin['start_time'].min():%b %Y}, **{matches['player_a'].nunique():,}** players")
         st.write(f"Results through **{fin['start_time'].max():%d %b %Y %H:%M}**")
         st.write(f"**{int((~matches['finished']).sum())}** upcoming on file")
     if config.STATE_FILE.exists():
@@ -166,8 +175,10 @@ with tab_h2h:
     if matches.empty:
         st.info("Needs data.")
     else:
-        feat = pipeline.features_now()
-        snap = player_snapshot(feat)
+        snap = D["players"]
+        if snap.empty:
+            st.info("Player ratings appear after the next refresh run.")
+            st.stop()
         names = snap["player"].tolist()
         c1, c2 = st.columns(2)
         a = c1.selectbox("Player A", names, index=0)
