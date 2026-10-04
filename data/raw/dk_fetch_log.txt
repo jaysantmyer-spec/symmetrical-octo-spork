@@ -1,1 +1,4 @@
-sports listing failed: 403 Client Error: Forbidden for url: https://sportsbook-nash.draftkings.com/api/sportscontent/dkusva/v1/sports
+v5 https://sportsbook.draftkings.com/sites/US-SB/api/v5/eventgroups/208037?format=json: 403 Client Error: Forbidden for url: https://sportsbook.draftkings.com/sites/US-SB/api/v5/eventgroups/208037?format=json
+v5nash https://sportsbook-nash.draftkings.com/sites/US-SB/api/v5/eventgroups/208037?format=json: 403 Client Error: Forbidden for url: https://sportsbook-nash.draftkings.com/sites/US-SB/api/v5/eventgroups/208037?format=json
+nash https://sportsbook-nash.draftkings.com/api/sportscontent/dkusva/v1/leagues/208037: 403 Client Error: Forbidden for url: https://sportsbook-nash.draftkings.com/api/sportscontent/dkusva/v1/leagues/208037
+nash-nj https://sportsbook-nash.draftkings.com/api/sportscontent/dkusnj/v1/leagues/208037: 403 Client Error: Forbidden for url: https://sportsbook-nash.draftkings.com/api/sportscontent/dkusnj/v1/leagues/208037
