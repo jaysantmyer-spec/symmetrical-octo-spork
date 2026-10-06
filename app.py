@@ -13,7 +13,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from tt_oracle import config, dk, pipeline, store
+from tt_oracle import config, dk, picks, pipeline, store
+from tt_oracle.names import canonicalize, merge_enabled
 
 st.set_page_config(page_title="TT Elite Oracle", page_icon="🏓", layout="wide")
 config.ensure_dirs()
@@ -42,10 +43,11 @@ MATCH_COLS = ["match_id", "post_id", "start_time", "session", "venue", "player_a
 
 
 @st.cache_data(show_spinner=False)
-def load(sig):
+def load(sig, merge_names: bool):
     """Only what the pages show. The full history is ~300k matches; keep the app's memory small."""
     m = pd.read_csv(config.MATCHES_CSV, usecols=MATCH_COLS, parse_dates=["start_time"]) if config.MATCHES_CSV.exists() else pd.DataFrame()
     if not m.empty:
+        m, _ = canonicalize(m, enabled=merge_names)
         m["finished"] = m["finished"].astype(bool)
         for c in ("session", "venue", "player_a", "player_b", "winner"):
             m[c] = m[c].astype("category")
@@ -60,8 +62,15 @@ def _sig():
                  (config.PREDICTIONS_CSV, config.MATCHES_CSV, config.ODDS_CSV, config.LEDGER_CSV, config.BACKTEST_CSV))
 
 
-D = load(_sig())
+with st.sidebar:
+    merge_names = st.checkbox("Merge name spellings", value=merge_enabled(),
+                              help="The site spells players with and without Polish accents (Radło / Radlo) and with typos. "
+                                   "On: treated as one player. Off: the old behaviour. Permanent default: TT_MERGE_NAMES setting.")
+D = load(_sig(), merge_names)
 pred, matches, odds, ledger, bt = D["pred"], D["matches"], D["odds"], D["ledger"], D["bt"]
+if not pred.empty and merge_names:
+    from tt_oracle.names import fold
+    pred = pred.copy(); pred["player_a"] = pred["player_a"].map(fold); pred["player_b"] = pred["player_b"].map(fold); pred["pick"] = pred["pick"].map(fold)
 state = json.loads(config.STATE_FILE.read_text()) if config.STATE_FILE.exists() else {}
 
 
@@ -103,7 +112,20 @@ with st.sidebar:
     st.divider()
     st.caption("Data refreshes every 6 hours via GitHub Actions. Predictions are logged before each match and graded after.")
 
-tab_today, tab_price, tab_h2h, tab_track, tab_data = st.tabs(["Today", "Pricing desk", "Head to head", "Track record", "Data"])
+tab_today, tab_price, tab_h2h, tab_mine, tab_track, tab_data = st.tabs(["Today", "Pricing desk", "Head to head", "My picks", "Track record", "Data"])
+
+
+def save_button(r, source: str, key: str):
+    """'Save pick' under a card; r is a prediction row (Series)."""
+    if st.button("Save pick", key=key, help="Adds this pick to the My picks tab"):
+        side = "a" if str(r["pick"]) == str(r["player_a"]) else "b"
+        ok, msg = picks.add({"source": source, "match_id": r.get("match_id") if source == "today" else None,
+                             "start_time": pd.Timestamp(r["start_time"]), "session": r.get("session"),
+                             "player_a": r["player_a"], "player_b": r["player_b"], "pick": r["pick"],
+                             "p_pick": float(r["pick_prob"]), "confidence": r.get("confidence"),
+                             "dk_odds": (dk.decimal_to_american(r[f"dk_odds_{side}"]) if pd.notna(r.get(f"dk_odds_{side}")) else None),
+                             "note": ""})
+        st.toast(f"Saved: {r['pick']} ({msg})" if ok else f"Saved locally only — {msg}", icon="✅" if ok else "⚠️")
 
 # --------------------------------------------------------------------------- today
 with tab_today:
@@ -147,6 +169,7 @@ with tab_today:
             st.subheader(f"{sess.title()} session · {len(vs)} matches")
             for _, r in vs.iterrows():
                 st.markdown(card_html(r), unsafe_allow_html=True)
+                save_button(r, "today", f"save_{r['match_id']}")
         st.download_button("Download predictions (CSV)", P.to_csv(index=False), file_name="tt_predictions.csv")
 
 # --------------------------------------------------------------------------- pricing desk
@@ -248,6 +271,7 @@ with tab_h2h:
                 pr["A_today_n"], pr["B_today_n"] = 0, 0
                 pr["session"], pr["venue"], pr["start_time"] = sess, "any venue", pd.Timestamp.now()
                 st.markdown(card_html(pr), unsafe_allow_html=True)
+                save_button(pr, "h2h", f"save_h2h_{a}_{b}_{sess}")
                 st.caption("Model prediction for this matchup if it were played in the chosen session today, both players "
                            "fresh. Fatigue and same-day load are set to zero; the live Today tab uses the real schedule.")
         c1, c2, c3 = st.columns(3)
@@ -258,6 +282,38 @@ with tab_h2h:
             st.dataframe(h[["start_time", "session", "venue", "player_a", "sets_a", "sets_b", "player_b"]], hide_index=True)
         st.subheader("Ratings leaderboard")
         st.dataframe(snap.head(40).rename(columns={"n": "matches"}).style.format({"elo": "{:.0f}", "win10": "{:.0%}"}), hide_index=True)
+
+# --------------------------------------------------------------------------- my picks
+with tab_mine:
+    mine = picks.grade(picks.load(), matches)
+    if picks._token() is None:
+        st.warning("Picks are saved on the app's disk only, which resets on every redeploy (about every 6 hours). "
+                   "To keep them permanently, add a GitHub token to the app's Secrets (see DEPLOY.md, 'Saved picks').")
+    if mine.empty:
+        st.info("No saved picks yet. Use the Save pick button under any card on the Today or Head to head tabs.")
+    else:
+        g = mine[mine["result"].notna()]
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Saved picks", len(mine))
+        c2.metric("Graded", len(g))
+        c3.metric("Record", f"{int((g['result'] == 'won').sum())}–{int((g['result'] == 'lost').sum())}" if len(g) else "–",
+                  f"{(g['result'] == 'won').mean():.0%} hit" if len(g) else None)
+        show = mine.sort_values("start_time", ascending=False).copy()
+        show["match"] = show["player_a"].astype(str) + " vs " + show["player_b"].astype(str)
+        show["result"] = show["result"].fillna("pending")
+        st.dataframe(show[["start_time", "session", "match", "pick", "p_pick", "confidence", "dk_odds", "source", "result", "winner"]]
+                     .rename(columns={"p_pick": "model"}).style.format({"model": "{:.0%}"}), hide_index=True)
+        st.subheader("Manage")
+        labels = {r["pick_id"]: f"{pd.Timestamp(r['start_time']):%d %b %H:%M} · {r['pick']} vs {r['player_b'] if r['pick'] == r['player_a'] else r['player_a']}"
+                  for _, r in show.iterrows()}
+        sel = st.multiselect("Remove selected picks", options=list(labels), format_func=labels.get)
+        cm1, cm2 = st.columns([1, 3])
+        if cm1.button("Remove", disabled=not sel):
+            ok, msg = picks.remove(sel); st.toast(msg); st.rerun()
+        sure = cm2.checkbox("I want to clear all saved picks")
+        if cm2.button("Clear all", type="primary", disabled=not sure):
+            ok, msg = picks.clear(); st.toast(msg); st.rerun()
+        st.download_button("Download my picks (CSV)", show.to_csv(index=False), file_name="my_picks.csv")
 
 # --------------------------------------------------------------------------- track record
 with tab_track:

@@ -27,11 +27,14 @@ def _ll(p, y):
 
 
 def load_matches() -> pd.DataFrame:
+    """Matches with canonical player names (accents folded, typo spellings merged) when TT_MERGE_NAMES is on."""
+    from .names import canonicalize
     m = store.read(config.MATCHES_CSV)
     if m.empty:
         return m
     m["start_time"] = pd.to_datetime(m["start_time"])
     m["finished"] = m["finished"].astype(bool)
+    m, _ = canonicalize(m)
     return m
 
 

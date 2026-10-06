@@ -25,3 +25,16 @@ with the id found in the raw files. Until then, the Pricing desk tab accepts pas
 ## Daily use
 Open the app on your phone. **Today** shows the sessions with picks highlighted; **Pricing desk** flags
 edges vs DraftKings; **Track record** shows how the logged picks have done. Nothing to press.
+
+## Saved picks (My picks tab)
+Picks you save are written to `data/my_picks.csv`. To keep them across the app's restarts, give the app a
+GitHub token so it can commit that file:
+1. github.com → your avatar → Settings → Developer settings → Personal access tokens → **Fine-grained tokens**
+   → Generate new token. Repository access: only this repo. Permissions: **Contents: Read and write**. Copy it.
+2. share.streamlit.io → the app → Settings → **Secrets** → add a line `GITHUB_TOKEN = "github_pat_..."` → Save.
+The app picks it up on the next load. Without it, picks live only until the next redeploy.
+
+## Name merging
+The site spells players inconsistently (Radło / Radlo, typos). Merging is on by default. The sidebar checkbox
+turns it off for your session; to turn it off everywhere, set `TT_MERGE_NAMES = "0"` in the app's Secrets and as
+a repository variable (GitHub → Settings → Secrets and variables → Actions → Variables).
