@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from tt_oracle import config, dk, picks, pipeline, store
-from tt_oracle.names import canonicalize, merge_enabled
+from tt_oracle.names import canonicalize, fold, merge_enabled
 
 st.set_page_config(page_title="TT Elite Oracle", page_icon="🏓", layout="wide")
 config.ensure_dirs()
@@ -247,9 +247,24 @@ with tab_h2h:
             st.info("Player ratings appear after the next refresh run.")
             st.stop()
         names = snap["player"].tolist()
+        folded = {n: fold(n).lower() for n in names}
+
+        def player_picker(col, label, key, default_index):
+            """Type any part of a name (accents ignored); the list narrows and the best match is selected at once."""
+            q = col.text_input(f"Search {label}", key=f"{key}_q", placeholder="type part of a name, e.g. radlo")
+            toks = fold(q).lower().split()
+            opts = [n for n in names if all(t in folded[n] for t in toks)] if toks else names
+            if not opts:
+                col.warning(f"No player matching '{q}'.")
+                opts = names
+            # best match first: name that starts with the typed text, then by rating (names list is rating-sorted)
+            if toks:
+                opts = sorted(opts, key=lambda n: 0 if folded[n].startswith(toks[0]) or any(w.startswith(toks[0]) for w in folded[n].split()) else 1)
+            return col.selectbox(label, opts, index=0 if toks else min(default_index, len(opts) - 1), key=f"{key}_sel")
+
         c1, c2 = st.columns(2)
-        a = c1.selectbox("Player A", names, index=0)
-        b = c2.selectbox("Player B", names, index=1 if len(names) > 1 else 0)
+        a = player_picker(c1, "Player A", "h2h_a", 0)
+        b = player_picker(c2, "Player B", "h2h_b", 1 if len(names) > 1 else 0)
         fin = matches[matches["finished"]]
         h = fin[((fin["player_a"] == a) & (fin["player_b"] == b)) | ((fin["player_a"] == b) & (fin["player_b"] == a))].sort_values("start_time", ascending=False)
         aw = int(((h["player_a"] == a) & (h["winner"] == "a")).sum() + ((h["player_b"] == a) & (h["winner"] == "b")).sum())
