@@ -78,7 +78,7 @@ def push_to_github(df: pd.DataFrame, message: str) -> tuple[bool, str]:
         body = {"message": message, "content": base64.b64encode(df.to_csv(index=False).encode()).decode()}
         if sha:
             body["sha"] = sha
-        r = requests.put(_gh_url(), headers=_gh_headers(), data=json.dumps(body), timeout=20)
+        r = requests.put(_gh_url(), headers={**_gh_headers(), "Content-Type": "application/json"}, json=body, timeout=20)
         r.raise_for_status()
         return True, "saved to GitHub"
     except Exception as ex:
@@ -87,8 +87,9 @@ def push_to_github(df: pd.DataFrame, message: str) -> tuple[bool, str]:
 
 def load() -> pd.DataFrame:
     df = pull_from_github()
-    if df is None:
-        df = store.read(PICKS_CSV)
+    local = store.read(PICKS_CSV)
+    if df is None or (df.empty and not local.empty and not _token()):
+        df = local
     if df.empty:
         return pd.DataFrame(columns=COLS)
     for c in COLS:
