@@ -176,7 +176,8 @@ with tab_today:
                         dk.snapshot_odds(got); st.cache_data.clear(); odds = store.read(config.ODDS_CSV)
                         st.success(f"{len(got)} matches loaded from DraftKings.")
                     st.code("\n".join(dk.LAST_FETCH_LOG) or "(no log)")
-            b3.caption("The Pricing desk also has a paste box for lines copied from the DraftKings app.")
+            b3.caption("DraftKings blocks cloud servers, so the dependable route is `scripts/push_lines.py` run on your own "
+                       "computer: it pulls the lines there and pushes them here (see DEPLOY.md). The Pricing desk also has a paste box.")
             if not odds.empty:
                 od = odds.copy()
                 od["when"] = pd.to_datetime(od["commence_time"], errors="coerce")

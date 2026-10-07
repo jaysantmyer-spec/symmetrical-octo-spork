@@ -52,3 +52,19 @@ The Today tab has a "DraftKings matches — odds feed" panel with three routes t
 
 Loaded lines are matched to the cards ("DraftKings: … / market …") and the "Only matches on DraftKings" box filters
 the day to those.
+
+### Pushing DraftKings lines from your own computer (the route that works)
+
+DraftKings serves its odds JSON to home connections but not to cloud servers (Streamlit, GitHub). So pull from your
+Mac and push to the repo:
+
+```
+cd symmetrical-octo-spork            # your clone of the repo
+pip install requests pandas          # once
+export GITHUB_TOKEN=github_pat_...   # the same fine-grained token as for saved picks (Contents: read/write)
+python scripts/push_lines.py         # once;  or:  python scripts/push_lines.py --loop 10   (every 10 min)
+```
+
+It commits `data/odds.csv` (and appends `data/odds_history.csv`). The app re-reads it within a minute, matches the
+lines to the day's cards, and the next refresh prices its predictions against them. Leave `--loop 10` running in a
+terminal on match days.
