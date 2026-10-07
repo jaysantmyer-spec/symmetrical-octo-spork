@@ -250,3 +250,138 @@ def price(P: pd.DataFrame, bankroll: float = 1000.0, kelly_fraction: float = 0.2
                          "thin": bool(r.get("thin_history", False)),
                          "bet": bool(pd.notna(edge) and edge >= edge_threshold and ev > 0 and not r.get("thin_history", False))})
     return pd.DataFrame(rows)
+
+
+# --------------------------------------------------------------------------- key-based odds providers
+# DraftKings' own feed needs no key but blocks data-centre IPs. A provider that aggregates books (DraftKings
+# among them) can be used with an API key entered in the app's Today tab or stored as a Streamlit secret.
+# Currently: OddsPapi (https://oddspapi.io, query-param apiKey, DraftKings supported). The JSON shapes are not
+# pinned down, so the parser is tolerant and every raw response is saved to data/raw/provider_*.json.
+PROVIDERS = {"oddspapi": "OddsPapi (oddspapi.io)"}
+ODDSPAPI = "https://api.oddspapi.io/v4"
+
+
+def provider_key(provider: str = "oddspapi") -> str | None:
+    name = f"{provider.upper()}_KEY"
+    k = os.getenv(name)
+    if not k:
+        try:
+            import streamlit as st
+            k = st.secrets.get(name) or st.session_state.get(name)
+        except Exception:
+            k = None
+    return (k or "").strip() or None
+
+
+def _walk(obj, want: set):
+    """Yield every dict in a nested JSON that has all keys in `want`."""
+    if isinstance(obj, dict):
+        if want <= set(obj):
+            yield obj
+        for v in obj.values():
+            yield from _walk(v, want)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _walk(v, want)
+
+
+def _first(d: dict, *names, default=None):
+    for n in names:
+        if n in d and d[n] not in (None, ""):
+            return d[n]
+    return default
+
+
+def fetch_oddspapi(key: str, bookmaker: str = "draftkings", save_raw: bool = True) -> pd.DataFrame:
+    """Table-tennis moneylines from OddsPapi for one bookmaker. Finds the table-tennis sport id and the
+    TT Elite tournaments by name, then pulls odds-by-tournaments. Logs every step to LAST_FETCH_LOG."""
+    global LAST_FETCH_LOG
+    log, rows = [], []
+    config.ensure_dirs()
+
+    def get(path, **params):
+        r = requests.get(f"{ODDSPAPI}/{path}", params={**params, "apiKey": key}, timeout=25)
+        if save_raw:
+            (config.RAW / f"provider_oddspapi_{path.replace('/', '_')}.json").write_text(r.text[:1_500_000])
+        r.raise_for_status()
+        return r.json()
+
+    try:
+        sports = get("sports")
+        cands = [s for s in _walk(sports, {"name"}) if "table tennis" in str(s.get("name", "")).lower()
+                 or "tabletennis" in str(s.get("slug", s.get("key", ""))).lower().replace("-", "").replace("_", "")]
+        if not cands:
+            names = sorted({str(s.get("name")) for s in _walk(sports, {"name"})})[:60]
+            log.append(f"no table-tennis sport at this provider; sports seen: {names}")
+            LAST_FETCH_LOG = log
+            return pd.DataFrame()
+        sport = cands[0]
+        sid = _first(sport, "sportId", "id", "sport_id")
+        log.append(f"sport: {sport.get('name')} (id {sid})")
+        tours = get("tournaments", sportId=sid)
+        tl = [t for t in _walk(tours, {"name"}) if re.search(r"tt\s*elite|elite\s*series", str(t.get("name", "")), re.I)]
+        if not tl:
+            names = sorted({str(t.get("name")) for t in _walk(tours, {"name"})})[:60]
+            log.append(f"no 'TT Elite' tournament listed; tournaments seen: {names}")
+            LAST_FETCH_LOG = log
+            return pd.DataFrame()
+        tids = sorted({str(_first(t, "tournamentId", "id", "tournament_id")) for t in tl})
+        log.append(f"tournaments: {[t.get('name') for t in tl]} ids {tids}")
+        data = get("odds-by-tournaments", bookmaker=bookmaker, tournamentIds=",".join(tids), oddsFormat="decimal")
+        now = pd.Timestamp.now(tz="UTC").tz_localize(None)
+        fixtures = list(_walk(data, {"participants"})) or list(_walk(data, {"homeTeam", "awayTeam"}))
+        log.append(f"{len(fixtures)} fixtures in the response")
+        for fx in fixtures:
+            parts = fx.get("participants")
+            if isinstance(parts, list) and len(parts) >= 2:
+                n1, n2 = (_first(parts[0], "name", "participantName"), _first(parts[1], "name", "participantName"))
+            else:
+                n1, n2 = _first(fx, "homeTeam", "home"), _first(fx, "awayTeam", "away")
+            if isinstance(n1, dict): n1 = _first(n1, "name")
+            if isinstance(n2, dict): n2 = _first(n2, "name")
+            # moneyline market: two outcomes whose names match the participants
+            o1 = o2 = None
+            for mk in _walk(fx, {"outcomes"}):
+                mname = str(_first(mk, "name", "marketName", "key", default="")).lower()
+                if mname and not any(w in mname for w in ("moneyline", "winner", "match", "h2h", "1x2", "result")):
+                    continue
+                outs = mk.get("outcomes") or []
+                vals = {}
+                for o in outs:
+                    on = str(_first(o, "name", "label", "participantName", default=""))
+                    price = _first(o, "price", "odds", "decimal", "value")
+                    if isinstance(price, dict): price = _first(price, "decimal", "price")
+                    vals[on] = price
+                for on, pr in vals.items():
+                    if n1 and _same(_key_set(on), _key_set(n1)): o1 = pr
+                    elif n2 and _same(_key_set(on), _key_set(n2)): o2 = pr
+                if o1 and o2:
+                    break
+            if n1 and n2 and o1 and o2:
+                rows.append({"event_id": _first(fx, "fixtureId", "id", "eventId"), "commence_time": _first(fx, "startTime", "commenceTime", "start", "date"),
+                             "player_1": n1, "odds_1": o1, "player_2": n2, "odds_2": o2, "league": "TT Elite Series (OddsPapi/" + bookmaker + ")",
+                             "bookmaker": bookmaker.title(), "fetched_at": now})
+        log.append(f"{len(rows)} {bookmaker} moneylines parsed")
+    except Exception as ex:
+        log.append(f"oddspapi: {ex}")
+    LAST_FETCH_LOG = log
+    (config.RAW / "provider_fetch_log.txt").write_text("\n".join(log))
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df["odds_1"] = pd.to_numeric(df["odds_1"], errors="coerce"); df["odds_2"] = pd.to_numeric(df["odds_2"], errors="coerce")
+    df["commence_time"] = pd.to_datetime(df["commence_time"], utc=True, errors="coerce").dt.tz_convert(None)
+    return df.dropna(subset=["odds_1", "odds_2"]).drop_duplicates(["player_1", "player_2", "commence_time"])
+
+
+def fetch_lines(provider: str | None = None, key: str | None = None) -> pd.DataFrame:
+    """Provider with a key first (when given), then DraftKings' direct feed."""
+    if provider == "oddspapi" and key:
+        df = fetch_oddspapi(key)
+        if not df.empty:
+            return df
+        prov_log = list(LAST_FETCH_LOG)
+        df = fetch_dk()
+        LAST_FETCH_LOG[:0] = prov_log
+        return df
+    return fetch_dk()

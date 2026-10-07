@@ -38,3 +38,17 @@ The app picks it up on the next load. Without it, picks live only until the next
 The site spells players inconsistently (Radło / Radlo, typos). Merging is on by default. The sidebar checkbox
 turns it off for your session; to turn it off everywhere, set `TT_MERGE_NAMES = "0"` in the app's Secrets and as
 a repository variable (GitHub → Settings → Secrets and variables → Actions → Variables).
+
+## DraftKings matches on the Today tab
+
+The Today tab has a "DraftKings matches — odds feed" panel with three routes to current lines:
+
+1. **Odds provider with an API key** — currently OddsPapi (oddspapi.io; DraftKings is one of its books). Paste the key
+   in the panel (kept for the session) or add `ODDSPAPI_KEY = "..."` to the app's Secrets to keep it. The panel's log
+   says what it found at each step (sport → "TT Elite" tournament → DraftKings moneylines); raw responses land in
+   `data/raw/provider_*.json` so the parser can be adjusted to the provider's exact format.
+2. **DraftKings' own feed** — no key; works only if DraftKings doesn't block the server's IP.
+3. **Paste box** on the Pricing desk.
+
+Loaded lines are matched to the cards ("DraftKings: … / market …") and the "Only matches on DraftKings" box filters
+the day to those.

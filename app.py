@@ -140,12 +140,60 @@ with tab_today:
         ok = ~P["thin_history"].astype(bool)
         c2.metric("75%+ picks", int(((P["pick_prob"] >= 0.75) & ok).sum()), f"{int(((P['pick_prob'] >= 0.85) & ok).sum())} at 85%+")
         c3.metric("With DraftKings line", int(P["market_p_a"].notna().sum()) if "market_p_a" in P else 0)
-        cd1, cd2 = st.columns([1, 2])
+
+        # ---- DraftKings matches: a key-based odds provider, DraftKings' own feed, or pasted lines
+        with st.expander("DraftKings matches — odds feed", expanded=odds.empty):
+            st.caption("Lines come from (1) an odds provider with your API key, (2) DraftKings' own site feed, which works "
+                       "only if this server isn't blocked, or (3) pasted lines. Whatever is loaded is matched to today's cards.")
+            k1, k2 = st.columns([2, 1])
+            provider = k2.selectbox("Provider", list(dk.PROVIDERS), format_func=dk.PROVIDERS.get, key="odds_provider")
+            default_key = dk.provider_key(provider) or ""
+            key_in = k1.text_input("API key", value=default_key, type="password", key="odds_key_in",
+                                   help="Saved for this session only. To keep it, add ODDSPAPI_KEY to the app's Secrets.")
+            if key_in.strip():
+                st.session_state[f"{provider.upper()}_KEY"] = key_in.strip()
+            b1, b2, b3 = st.columns([1, 1, 2])
+            if b1.button("Get DraftKings matches", type="primary", key="today_fetch"):
+                with st.spinner("Fetching lines…"):
+                    try:
+                        got = dk.fetch_lines(provider, key_in.strip() or None)
+                        if got.empty:
+                            st.warning("No TT Elite lines came back. The log below says which step found nothing.")
+                        else:
+                            dk.snapshot_odds(got)
+                            st.cache_data.clear()
+                            odds = store.read(config.ODDS_CSV)
+                            st.success(f"{len(got)} matches with {got['bookmaker'].iloc[0]} lines loaded.")
+                    except Exception as ex:
+                        st.error(f"Fetch failed: {ex}")
+                    st.code("\n".join(dk.LAST_FETCH_LOG) or "(no log)")
+            if b2.button("DraftKings feed only", key="today_fetch_dk", help="Skip the provider; try DraftKings' site feed from this server"):
+                with st.spinner("Asking DraftKings…"):
+                    got = dk.fetch_dk()
+                    if got.empty:
+                        st.warning("DraftKings' feed returned nothing from this server (it blocks most cloud IPs).")
+                    else:
+                        dk.snapshot_odds(got); st.cache_data.clear(); odds = store.read(config.ODDS_CSV)
+                        st.success(f"{len(got)} matches loaded from DraftKings.")
+                    st.code("\n".join(dk.LAST_FETCH_LOG) or "(no log)")
+            b3.caption("The Pricing desk also has a paste box for lines copied from the DraftKings app.")
+            if not odds.empty:
+                od = odds.copy()
+                od["when"] = pd.to_datetime(od["commence_time"], errors="coerce")
+                od["line"] = od.apply(lambda r: f"{r['player_1']} {dk.decimal_to_american(r['odds_1'])} / {r['player_2']} {dk.decimal_to_american(r['odds_2'])}", axis=1)
+                st.caption(f"{len(od)} lines on file from {od['bookmaker'].iloc[0]} ({pd.to_datetime(od['fetched_at']).max():%d %b %H:%M} UTC)")
+                st.dataframe(od[["when", "line"]].sort_values("when"), hide_index=True, height=min(400, 40 + 35 * len(od)))
+        if not odds.empty:
+            P = dk.attach_market(P, odds)      # re-match with whatever lines are loaded right now
+        cd1, cd2, cd3 = st.columns([1, 2, 1])
         day = cd1.selectbox("Day", sorted(P["start_time"].dt.date.unique()))
+        only_dk = cd3.checkbox("Only matches on DraftKings", value=False, help="Show just the matches that have a line loaded")
         min_p = cd2.radio("Minimum model probability", [0.0, 0.75, 0.85], index=1, horizontal=True,
                           format_func=lambda v: {0.0: "All matches", 0.75: "75%+ picks", 0.85: "85%+ picks"}[v])
         q = st.text_input("Search a player or match", placeholder="e.g. Jadach, or Jadach Urban", key="today_q")
         view = P[P["start_time"].dt.date == day]
+        if only_dk:
+            view = view[view["market_p_a"].notna()]
         if min_p > 0:
             view = view[(view["pick_prob"] >= min_p) & ~view["thin_history"].astype(bool)]
         if q.strip():
