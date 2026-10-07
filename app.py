@@ -92,7 +92,16 @@ def card_html(r) -> str:
 <div class="names"><div class="a">{e(str(r['player_a']))}</div><div class="b">{e(str(r['player_b']))}</div></div>
 <div class="split"><div class="ra" style="width:{pa*100:.1f}%"></div><div class="rb" style="width:{(1-pa)*100:.1f}%"></div></div>
 <div class="pcts"><span style="color:{ORANGE}">{pa:.0%}</span><span style="color:{NAVY}">{1-pa:.0%}</span></div>
-<div class="line"><b>{e(str(r['pick']))}</b> ({str(r['confidence']).lower()}). Elo alone: {r['elo_p_a']:.0%}. H2H matches: {int(r['h2h_n'])}. Today so far: {int(r['A_today_n'])} / {int(r['B_today_n'])}.</div>{mk}</div>"""
+<div class="line"><b>{e(str(r['pick']))}</b> ({str(r['confidence']).lower()}). Elo alone: {r['elo_p_a']:.0%}. H2H matches: {int(r['h2h_n'])}. Today so far: {int(r['A_today_n'])} / {int(r['B_today_n'])}.</div>{games_line(r)}{mk}</div>"""
+
+
+def games_line(r) -> str:
+    """Number-of-games percentages (DraftKings' 'total games' market) when the model has them."""
+    if pd.isna(r.get("p_g3")):
+        return ""
+    return (f'<div class="line" style="color:#5B6470">Games: 3 <b>{float(r["p_g3"]):.0%}</b> · 4 <b>{float(r["p_g4"]):.0%}</b> · 5 <b>{float(r["p_g5"]):.0%}</b>'
+            f' → over 3.5 games {float(r["over35"]):.0%}, over 4.5 games {float(r["over45"]):.0%}.'
+            f' Likely score {e(str(r.get("likely_score", "")))} ({float(r.get("likely_score_p", 0)):.0%}).</div>')
 
 
 # --------------------------------------------------------------------------- sidebar
@@ -434,6 +443,18 @@ with tab_track:
         k1.metric("75%+ picks hit rate", f"{b75['correct'].mean():.1%}", f"{len(b75):,} picks")
         k2.metric("85%+ picks hit rate", f"{b85['correct'].mean():.1%}" if len(b85) else "–", f"{len(b85):,} picks")
         st.dataframe(pipeline.calibration_table(bt).style.format({"predicted": "{:.1%}", "actual": "{:.1%}"}), hide_index=True)
+        if "games" in s:
+            gs = s["games"]
+            st.subheader("Number of games (total games 3.5 / 4.5)")
+            st.caption("How many games a match goes is only weakly predictable: the model's edge over 'assume the long-run split' "
+                       "is small, but its percentages are calibrated, so they are useful for spotting a mispriced total, not as a standalone pick.")
+            g1, g2, g3, g4 = st.columns(4)
+            g1.metric("Matches", gs["n"])
+            g2.metric("Model log loss", f"{gs['log_loss']:.4f}", f"{gs['prior_log_loss'] - gs['log_loss']:+.4f} vs long-run split", delta_color="normal")
+            g3.metric("Over 3.5 when ≥70%", f"{gs['over35_hit_when_called']:.0%}" if gs["over35_calls"] else "–", f"{gs['over35_calls']} calls")
+            g4.metric("Under 4.5 when ≤25% five", f"{gs['under45_hit_when_called']:.0%}" if gs["under45_calls"] else "–", f"{gs['under45_calls']} calls")
+            st.caption(f"Actual split 3/4/5 games: {' / '.join(f'{x:.0%}' for x in gs['actual_3_4_5'])} · model's average: {' / '.join(f'{x:.0%}' for x in gs['predicted_3_4_5'])}")
+            st.dataframe(pipeline.games_calibration(bt).style.format({"pred_3": "{:.1%}", "actual_3": "{:.1%}", "pred_5": "{:.1%}", "actual_5": "{:.1%}"}), hide_index=True)
 
 # --------------------------------------------------------------------------- data
 with tab_data:

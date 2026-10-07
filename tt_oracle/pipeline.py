@@ -200,6 +200,7 @@ def walk_forward(feat: pd.DataFrame, start, end=None, step_days: int = 7, learne
                       hardness_alpha=config.DEFAULTS["hardness_alpha"] if adaptive else 0.0,
                       weights=weights, temperature=temp)
         P = mdl.predict(rows)
+        P["sets_a"], P["sets_b"] = rows["sets_a"].to_numpy(), rows["sets_b"].to_numpy()
         P["train_cutoff"] = lo
         preds.append(P)
     if progress:
@@ -224,11 +225,35 @@ def summarize(bt: pd.DataFrame) -> dict:
         s["auc"] = float("nan")
     s["by_confidence"] = (bt.groupby("confidence")["correct"].agg(["size", "mean"]).rename(
         columns={"size": "picks", "mean": "hit_rate"}).to_dict("index"))
+    if "p_g3" in bt and "sets_a" in bt:
+        g = bt.dropna(subset=["sets_a", "sets_b", "p_g3"]).copy()
+        ng = (g["sets_a"].astype(float) + g["sets_b"].astype(float)).astype(int)
+        g = g[ng.between(3, 5)]; ng = ng[ng.between(3, 5)]
+        if len(g) >= 50:
+            P = g[["p_g3", "p_g4", "p_g5"]].to_numpy(float)
+            prior = np.array([(ng == k).mean() for k in (3, 4, 5)])
+            s["games"] = {"n": int(len(g)), "log_loss": float(-np.log(np.clip(P[np.arange(len(g)), ng.to_numpy() - 3], 1e-6, 1)).mean()),
+                          "prior_log_loss": float(-np.log(np.clip(prior[ng.to_numpy() - 3], 1e-6, 1)).mean()),
+                          "actual_3_4_5": [float(x) for x in prior], "predicted_3_4_5": [float(x) for x in P.mean(axis=0)],
+                          "over35_hit_when_called": float((ng > 3)[g["over35"] >= 0.7].mean()) if (g["over35"] >= 0.7).any() else float("nan"),
+                          "over35_calls": int((g["over35"] >= 0.7).sum()),
+                          "under45_hit_when_called": float((ng < 5)[g["over45"] <= 0.25].mean()) if (g["over45"] <= 0.25).any() else float("nan"),
+                          "under45_calls": int((g["over45"] <= 0.25).sum())}
     if "market_p_a" in bt and bt["market_p_a"].notna().sum() >= 30:
         mk = bt[bt["market_p_a"].notna()]
         s["market_accuracy"] = float(((mk["market_p_a"] >= 0.5) == mk["y"]).mean())
         s["model_accuracy_same_matches"] = float(((mk["p_a"] >= 0.5) == mk["y"]).mean())
     return s
+
+
+def games_calibration(bt: pd.DataFrame) -> pd.DataFrame:
+    """Predicted vs actual share of 3-, 4- and 5-game matches, by the model's P(3 games) bucket."""
+    g = bt.dropna(subset=["sets_a", "sets_b", "p_g3"]).copy()
+    g["ng"] = (g["sets_a"].astype(float) + g["sets_b"].astype(float)).astype(int)
+    g = g[g["ng"].between(3, 5)]
+    b = pd.cut(g["p_g3"], [0, 0.25, 0.3, 0.35, 0.4, 0.5, 1.0])
+    return g.groupby(b, observed=True).agg(matches=("ng", "size"), pred_3=("p_g3", "mean"), actual_3=("ng", lambda v: (v == 3).mean()),
+                                           pred_5=("p_g5", "mean"), actual_5=("ng", lambda v: (v == 5).mean())).reset_index().rename(columns={"p_g3": "P(3 games) bucket"})
 
 
 def calibration_table(bt: pd.DataFrame) -> pd.DataFrame:

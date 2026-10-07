@@ -122,6 +122,28 @@ def fit_temperature(p, y) -> float:
     return best
 
 
+GAMES_COLS = ["abs_delo", "abs_dwin10", "abs_dsetr", "sum_setr", "abs_dh2h", "abs_elo_p", "A_today_n", "B_today_n",
+              "both_n_min", "A_streak", "B_streak"]
+
+
+def _games_matrix(df: pd.DataFrame) -> np.ndarray:
+    """Symmetric (corner-free) features for how many games a match goes: how lopsided it is, how set-heavy
+    both players' recent matches have been, fatigue, streaks."""
+    g = pd.DataFrame({"abs_delo": df["d_elo"].abs(), "abs_dwin10": df["d_win10"].abs(), "abs_dsetr": df["d_setr30"].abs(),
+                      "sum_setr": df["A_setr30"] + df["B_setr30"], "abs_dh2h": df["d_h2h_net"].abs(),
+                      "abs_elo_p": (df["elo_p_a"] - 0.5).abs(), "A_today_n": df["A_today_n"], "B_today_n": df["B_today_n"],
+                      "both_n_min": df["both_n_min"], "A_streak": df["A_streak"], "B_streak": df["B_streak"]})
+    return g[GAMES_COLS].to_numpy(float)
+
+
+def _iid_games(p_a: np.ndarray) -> np.ndarray:
+    """Fallback: best-of-5 with an independent per-game probability implied by the match probability."""
+    qs = np.linspace(0.01, 0.99, 981)
+    pm = qs ** 3 * (1 + 3 * (1 - qs) + 6 * (1 - qs) ** 2)
+    q = np.interp(np.asarray(p_a, float), pm, qs); r = 1 - q
+    return np.column_stack([q ** 3 + r ** 3, 3 * q ** 3 * r + 3 * r ** 3 * q, 6 * q ** 3 * r ** 2 + 6 * r ** 3 * q ** 2])
+
+
 def _matrix(df: pd.DataFrame, flip: bool) -> np.ndarray:
     D = df[[f"d_{k}" for k in DIFF_FEATURES]].to_numpy(float)
     C = df[CONTEXT_FEATURES].to_numpy(float)
@@ -135,6 +157,15 @@ class Predictor:
     weights: dict = field(default_factory=dict)
     temperature: float = 1.0
     meta: dict = field(default_factory=dict)
+    games_model: object = None          # (logreg, hgb) multinomial on 3 / 4 / 5 games
+
+    def games(self, df: pd.DataFrame, p_a: np.ndarray) -> np.ndarray:
+        gm = getattr(self, "games_model", None)
+        if not gm:
+            return _iid_games(p_a)
+        X = _games_matrix(df)
+        P = np.mean([m.predict_proba(X) for m in gm], axis=0)
+        return P
 
     def save(self, path=config.MODEL_FILE):
         config.ensure_dirs()
@@ -171,6 +202,19 @@ class Predictor:
                                    labels=["Coin flip", "Lean", "Solid", "Strong"]).astype(str)
         thin = (out["A_career_n"] < config.DEFAULTS["min_history"]) | (out["B_career_n"] < config.DEFAULTS["min_history"])
         out["thin_history"] = thin
+        G = self.games(df, p)
+        out["p_g3"], out["p_g4"], out["p_g5"] = G[:, 0], G[:, 1], G[:, 2]
+        out["over35"], out["over45"] = 1 - G[:, 0], G[:, 2]
+        # likely final score: split each game-count between the two players by who is favoured
+        q = np.clip(p, 0.02, 0.98)
+        share3 = q ** 3 / (q ** 3 + (1 - q) ** 3)
+        share4 = q ** 3 * (1 - q) / (q ** 3 * (1 - q) + (1 - q) ** 3 * q)
+        share5 = q ** 3 * (1 - q) ** 2 / (q ** 3 * (1 - q) ** 2 + (1 - q) ** 3 * q ** 2)
+        scores = {"3-0": G[:, 0] * share3, "0-3": G[:, 0] * (1 - share3), "3-1": G[:, 1] * share4, "1-3": G[:, 1] * (1 - share4),
+                  "3-2": G[:, 2] * share5, "2-3": G[:, 2] * (1 - share5)}
+        S = np.column_stack(list(scores.values())); names = np.array(list(scores))
+        out["likely_score"] = names[S.argmax(axis=1)]
+        out["likely_score_p"] = S.max(axis=1)
         return out
 
 
@@ -196,10 +240,23 @@ def train(feat: pd.DataFrame, learners: list[str] | None = None, cutoff=None, ha
     ww = np.concatenate([w, w])
     learners = learners or available_learners()
     models = {n: _fit(make_learner(n, seed), X, y, ww) for n in learners}
+    games_model = None
+    if "sets_a" in tr and tr["sets_a"].notna().sum() > 2000:
+        g = tr[tr["sets_a"].notna() & tr["sets_b"].notna()]
+        ng = (g["sets_a"].astype(float) + g["sets_b"].astype(float)).astype(int)
+        g = g[ng.between(3, 5)]; ng = ng[ng.between(3, 5)]
+        Xg = _games_matrix(g)
+        wg = w[tr.index.get_indexer(g.index)]
+        g_lr = Pipeline([("imp", SimpleImputer(strategy="median")), ("sc", StandardScaler()),
+                         ("clf", LogisticRegression(C=0.3, max_iter=2000))]).fit(Xg, ng, clf__sample_weight=wg)
+        g_hgb = HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, max_leaf_nodes=15, min_samples_leaf=80,
+                                               random_state=seed).fit(Xg, ng, sample_weight=wg)
+        games_model = (g_lr, g_hgb)
     return Predictor(models, list(learners), weights or {}, temperature, {
         "trained_at": pd.Timestamp.now().isoformat(timespec="seconds"), "n_train": int(len(tr)),
         "data_through": str(tr["start_time"].max()), "learners": list(learners), "half_life_days": hl,
-        "hardness_alpha": hardness_alpha, "version": pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")})
+        "hardness_alpha": hardness_alpha, "version": pd.Timestamp.now().strftime("%Y%m%d-%H%M%S"),
+        "games_model": games_model is not None}, games_model)
 
 
 # --------------------------------------------------------------------------- learning state
