@@ -101,7 +101,7 @@ def games_line(r) -> str:
         return ""
     return (f'<div class="line" style="color:#5B6470">Games: 3 <b>{float(r["p_g3"]):.0%}</b> · 4 <b>{float(r["p_g4"]):.0%}</b> · 5 <b>{float(r["p_g5"]):.0%}</b>'
             f' → over 3.5 games {float(r["over35"]):.0%}, over 4.5 games {float(r["over45"]):.0%}.'
-            f' Likely score {e(str(r.get("likely_score", "")))} ({float(r.get("likely_score_p", 0)):.0%}).</div>')
+            f' Likely score {html.escape(str(r.get("likely_score", "")))} ({float(r.get("likely_score_p", 0)):.0%}).</div>')
 
 
 # --------------------------------------------------------------------------- sidebar
