@@ -141,6 +141,20 @@ with tab_today:
         c2.metric("75%+ picks", int(((P["pick_prob"] >= 0.75) & ok).sum()), f"{int(((P['pick_prob'] >= 0.85) & ok).sum())} at 85%+")
         c3.metric("With DraftKings line", int(P["market_p_a"].notna().sum()) if "market_p_a" in P else 0)
 
+        # ---- where the picks are: every 75%+ pick across all upcoming days, grouped by day and session
+        picks75 = P[(P["pick_prob"] >= 0.75) & ok].copy()
+        if not picks75.empty:
+            picks75["day"] = picks75["start_time"].dt.date
+            by_day = picks75.groupby("day").agg(picks=("match_id", "size"), at85=("pick_prob", lambda v: int((v >= 0.85).sum())))
+            summary = " · ".join(f"{pd.Timestamp(d):%a %d %b}: {int(r['picks'])} ({int(r['at85'])} at 85%+)" for d, r in by_day.iterrows())
+            with st.expander(f"Where the {len(picks75)} picks are — {summary}", expanded=False):
+                tbl = picks75.sort_values("start_time")[["start_time", "session", "player_a", "player_b", "pick", "pick_prob", "confidence"]].copy()
+                tbl["when"] = tbl["start_time"].dt.strftime("%a %d %b %H:%M")
+                tbl["match"] = tbl["player_a"].astype(str) + " vs " + tbl["player_b"].astype(str)
+                st.dataframe(tbl[["when", "session", "match", "pick", "pick_prob", "confidence"]].rename(columns={"pick_prob": "model"})
+                             .style.format({"model": "{:.0%}"}), hide_index=True, height=min(500, 40 + 35 * len(tbl)))
+                st.caption("Times are the site's local time (Poland). Pick the day below to see the full cards; choose 'All days' to list everything.")
+
         # ---- DraftKings matches: a key-based odds provider, DraftKings' own feed, or pasted lines
         with st.expander("DraftKings matches — odds feed", expanded=odds.empty):
             st.caption("Lines come from (1) an odds provider with your API key, (2) DraftKings' own site feed, which works "
@@ -187,12 +201,13 @@ with tab_today:
         if not odds.empty:
             P = dk.attach_market(P, odds)      # re-match with whatever lines are loaded right now
         cd1, cd2, cd3 = st.columns([1, 2, 1])
-        day = cd1.selectbox("Day", sorted(P["start_time"].dt.date.unique()))
+        days = sorted(P["start_time"].dt.date.unique())
+        day = cd1.selectbox("Day", ["All days"] + days, index=1 if days else 0)
         only_dk = cd3.checkbox("Only matches on DraftKings", value=False, help="Show just the matches that have a line loaded")
         min_p = cd2.radio("Minimum model probability", [0.0, 0.75, 0.85], index=1, horizontal=True,
                           format_func=lambda v: {0.0: "All matches", 0.75: "75%+ picks", 0.85: "85%+ picks"}[v])
         q = st.text_input("Search a player or match", placeholder="e.g. Jadach, or Jadach Urban", key="today_q")
-        view = P[P["start_time"].dt.date == day]
+        view = P if day == "All days" else P[P["start_time"].dt.date == day]
         if only_dk:
             view = view[view["market_p_a"].notna()]
         if min_p > 0:
@@ -205,20 +220,23 @@ with tab_today:
             both = (view["player_a"].map(_fold) + " " + view["player_b"].map(_fold))
             view = view[both.apply(lambda s: all(w in s for w in words))]
             if view.empty:
-                view = P[P["start_time"].dt.date == day]
+                view = P if day == "All days" else P[P["start_time"].dt.date == day]
                 both = (view["player_a"].map(_fold) + " " + view["player_b"].map(_fold))
                 view = view[both.apply(lambda s: all(w in s for w in words))]
                 if not view.empty:
                     st.caption("No match at the chosen probability filter; showing all matches for that search.")
         st.caption(f"{len(view)} matches shown" + (f" at {min_p:.0%}+ (players with thin history excluded)" if min_p and not q.strip() else ""))
-        for sess in config.SESSIONS:
-            vs = view[view["session"] == sess]
-            if vs.empty:
-                continue
-            st.subheader(f"{sess.title()} session · {len(vs)} matches")
-            for _, r in vs.iterrows():
-                st.markdown(card_html(r), unsafe_allow_html=True)
-                save_button(r, "today", f"save_{r['match_id']}")
+        for d, vd in view.groupby(view["start_time"].dt.date, sort=True):
+            if day == "All days":
+                st.markdown(f"### {pd.Timestamp(d):%A %d %B} · {len(vd)} matches")
+            for sess in config.SESSIONS:
+                vs = vd[vd["session"] == sess]
+                if vs.empty:
+                    continue
+                st.subheader(f"{sess.title()} session · {len(vs)} matches")
+                for _, r in vs.iterrows():
+                    st.markdown(card_html(r), unsafe_allow_html=True)
+                    save_button(r, "today", f"save_{r['match_id']}")
         st.download_button("Download predictions (CSV)", P.to_csv(index=False), file_name="tt_predictions.csv")
 
 # --------------------------------------------------------------------------- pricing desk
