@@ -1,1 +1,1 @@
-{"message":"Unauthorized","http_status_code":401}
+{"statusCode":400,"message":["property query should not exist","q may only contain letters, numbers, spaces, apostrophes, periods, and hyphens","q must be shorter than or equal to 80 characters","q must be longer than or equal to 2 characters","q must be a string"],"error":"Bad Request","path":"/api/v1/table_tennis/search?query=TT+Elite","timestamp":"2026-10-12T14:51:53.776Z","requestId":"a0f5d134-3cf2-4043-9857-4144907e2944"}

@@ -1,1 +1,1 @@
-{"message":"Unauthorized","http_status_code":401}
+{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/events/date/2026-10-11","error":"Not Found","path":"/api/v1/table_tennis/events/date/2026-10-11","timestamp":"2026-10-12T14:51:55.186Z","requestId":"4a6f59fc-5306-4bdf-a048-ea54335ab373"}

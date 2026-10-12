@@ -10,18 +10,39 @@ auth query api_key                                    -> 400 '{"statusCode":400,
 auth gravitee + base /table-tennis/v1                 -> 404 'No context-path matches the request URI.'
 auth gravitee + base /v1 (no sport)                   -> 404 'No context-path matches the request URI.'
 auth gravitee + tennis (is the key for another sport?) -> 404 '{"error":true,"message":"Cannot GET /tennis/v2/fixtures/today"}'
-GET /search {'q': 'TT Elite'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
-GET /search {'query': 'TT Elite'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
-GET /competitions {} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
-GET /unique-tournaments {} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
-GET /competitions {'q': 'elite'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
-GET /events {'date': '2026-10-12'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+GET /search {'q': 'TT Elite'} -> 200 (154 chars)  '{"items":[{"type":"tournament","id":57948020,"name":"TT Elite Series","countryAlpha2":"PL"}],"page":1,"limit":10,"total":1,"totalPages":1,"hasMore":false}'
+   TT Elite-like names: ['TT Elite Series']
+   first object: {"type": "tournament", "id": 57948020, "name": "TT Elite Series", "countryAlpha2": "PL"}
+GET /search {'query': 'TT Elite'} -> 400 (430 chars)  '{"statusCode":400,"message":["property query should not exist","q may only contain letters, numbers, spaces, apostrophes, periods, and hyphens","q must be shorter than or equal to 80 characters","q must be longer than or equal to 2 characters","q must be a string"],"error":"Bad Request","path":"/api'
+GET /competitions {} -> 404 (228 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/competitions","error":"Not Found","path":"/api/v1/table_tennis/competitions","timestamp":"2026-10-12T14:51:53.996Z","requestId":"0a8d17bc-aee6-4730-9cb8-42db9703c05c"}'
+GET /unique-tournaments {} -> 404 (240 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/unique-tournaments","error":"Not Found","path":"/api/v1/table_tennis/unique-tournaments","timestamp":"2026-10-12T14:51:54.147Z","requestId":"7dc7f2ff-1422-4cf5-aa38-96f7c3b8067a"}'
+GET /competitions {'q': 'elite'} -> 404 (244 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/competitions?q=elite","error":"Not Found","path":"/api/v1/table_tennis/competitions?q=elite","timestamp":"2026-10-12T14:51:54.322Z","requestId":"00c4734a-b5d8-4baf-a6ef-87483b1a2ed0"}'
+GET /events {'date': '2026-10-12'} -> 400 (228 chars)  '{"statusCode":400,"message":["property date should not exist"],"error":"Bad Request","path":"/api/v1/table_tennis/events?date=2026-10-12","timestamp":"2026-10-12T14:51:54.489Z","requestId":"aed32e27-36e1-44fa-8005-0acb88965ee3"}'
    events: 0; mentioning 'elite': 0
-GET /events {'date': '2026-10-11'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+GET /events {'date': '2026-10-11'} -> 400 (228 chars)  '{"statusCode":400,"message":["property date should not exist"],"error":"Bad Request","path":"/api/v1/table_tennis/events?date=2026-10-11","timestamp":"2026-10-12T14:51:54.665Z","requestId":"64d99856-05d2-4dc8-ab2c-028cacfce81c"}'
    events: 0; mentioning 'elite': 0
-GET /fixtures/today {} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+GET /fixtures/today {} -> 200 (1892 chars)  '{"items":[{"id":93869854,"tournamentId":86424354,"homeTeam":{"id":57611093,"name":"Lopatin S."},"awayTeam":{"id":67203554,"name":"Kustov D."},"startTimestamp":1791763200,"status":"finished"},{"id":48215987,"tournamentId":87328107,"homeTeam":{"id":14068130,"name":"Vladimir Cermak"},"awayTeam":{"id":3'
+   event keys: ['awayTeam', 'homeTeam', 'id', 'startTimestamp', 'status', 'tournamentId']
+   tournaments in this list (3): ['57948020', '86424354', '87328107']
+   events: 10; mentioning 'elite': 0
+   sample event: {"id": 93869854, "tournamentId": 86424354, "homeTeam": {"id": 57611093, "name": "Lopatin S."}, "awayTeam": {"id": 67203554, "name": "Kustov D."}, "startTimestamp": 1791763200, "status": "finished"}
+   competitions seen: ['']
+GET /events {'from': '2026-10-11', 'to': '2026-10-12'} -> 400 (273 chars)  '{"statusCode":400,"message":["property from should not exist","property to should not exist"],"error":"Bad Request","path":"/api/v1/table_tennis/events?from=2026-10-11&to=2026-10-12","timestamp":"2026-10-12T14:51:55.016Z","requestId":"ba6f4342-6f83-417a-856a-1d9032223f5b"}'
    events: 0; mentioning 'elite': 0
-GET /events {'from': '2026-10-11', 'to': '2026-10-12'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+GET /events/date/2026-10-11 {} -> 404 (248 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/events/date/2026-10-11","error":"Not Found","path":"/api/v1/table_tennis/events/date/2026-10-11","timestamp":"2026-10-12T14:51:55.186Z","requestId":"4a6f59fc-5306-4bdf-a048-ea54335ab373"}'
    events: 0; mentioning 'elite': 0
-GET /events/date/2026-10-11 {} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
-   events: 0; mentioning 'elite': 0
+GET /fixtures/today {} -> 200 (1892 chars)  '{"items":[{"id":93869854,"tournamentId":86424354,"homeTeam":{"id":57611093,"name":"Lopatin S."},"awayTeam":{"id":67203554,"name":"Kustov D."},"startTimestamp":1791763200,"status":"finished"},{"id":48215987,"tournamentId":87328107,"homeTeam":{"id":14068130,"name":"Vladimir Cermak"},"awayTeam":{"id":3'
+tournament ids today: [57948020, 86424354, 87328107]
+GET /tournaments/57948020 {} -> 404 (244 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/tournaments/57948020","error":"Not Found","path":"/api/v1/table_tennis/tournaments/57948020","timestamp":"2026-10-12T14:51:55.600Z","requestId":"fda2e4f1-6ec7-4ef6-a63a-500032d3a68a"}'
+GET /tournament/57948020 {} -> 404 (242 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/tournament/57948020","error":"Not Found","path":"/api/v1/table_tennis/tournament/57948020","timestamp":"2026-10-12T14:51:55.807Z","requestId":"a3711b77-4dda-4d25-9767-cf1dc9ecba79"}'
+GET /competitions/57948020 {} -> 404 (246 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/competitions/57948020","error":"Not Found","path":"/api/v1/table_tennis/competitions/57948020","timestamp":"2026-10-12T14:51:55.972Z","requestId":"ff3dc516-1afd-4c9a-88f8-1cf01a619a5c"}'
+GET /unique-tournaments/57948020 {} -> 404 (258 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/unique-tournaments/57948020","error":"Not Found","path":"/api/v1/table_tennis/unique-tournaments/57948020","timestamp":"2026-10-12T14:51:56.135Z","requestId":"bb512058-e353-46a6-aa86-20a4cccea586"}'
+GET /tournaments/86424354 {} -> 404 (244 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/tournaments/86424354","error":"Not Found","path":"/api/v1/table_tennis/tournaments/86424354","timestamp":"2026-10-12T14:51:56.292Z","requestId":"78c00a3a-d204-46c5-80f3-2f6c59d16580"}'
+GET /tournament/86424354 {} -> 404 (242 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/tournament/86424354","error":"Not Found","path":"/api/v1/table_tennis/tournament/86424354","timestamp":"2026-10-12T14:51:56.451Z","requestId":"bf6893ca-a2e4-4b88-9aad-30b32fdddc64"}'
+GET /competitions/86424354 {} -> 404 (246 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/competitions/86424354","error":"Not Found","path":"/api/v1/table_tennis/competitions/86424354","timestamp":"2026-10-12T14:51:56.617Z","requestId":"c6ea728e-0a16-4fe9-9949-eb789a80534f"}'
+GET /unique-tournaments/86424354 {} -> 404 (258 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/unique-tournaments/86424354","error":"Not Found","path":"/api/v1/table_tennis/unique-tournaments/86424354","timestamp":"2026-10-12T14:51:56.775Z","requestId":"973fab68-54ca-4b29-82aa-0208692ebc34"}'
+GET /tournaments/87328107 {} -> 404 (244 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/tournaments/87328107","error":"Not Found","path":"/api/v1/table_tennis/tournaments/87328107","timestamp":"2026-10-12T14:51:56.932Z","requestId":"bd209b1a-5699-4bd9-89b8-a0e5bc10bf9d"}'
+GET /tournament/87328107 {} -> 404 (242 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/tournament/87328107","error":"Not Found","path":"/api/v1/table_tennis/tournament/87328107","timestamp":"2026-10-12T14:51:57.094Z","requestId":"b6e59922-0d66-4574-b3a6-fc3a33fd1d36"}'
+GET /competitions/87328107 {} -> 404 (246 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/competitions/87328107","error":"Not Found","path":"/api/v1/table_tennis/competitions/87328107","timestamp":"2026-10-12T14:51:57.266Z","requestId":"6d0632b3-eaed-47cb-90dc-2a0294f0cfd7"}'
+GET /unique-tournaments/87328107 {} -> 404 (258 chars)  '{"statusCode":404,"message":"Cannot GET /api/v1/table_tennis/unique-tournaments/87328107","error":"Not Found","path":"/api/v1/table_tennis/unique-tournaments/87328107","timestamp":"2026-10-12T14:51:57.422Z","requestId":"646546ae-5656-4630-b2f8-c62fce68edaf"}'
+ENDED/sample event full: {"id": 93869854, "tournamentId": 86424354, "homeTeam": {"id": 57611093, "name": "Lopatin S."}, "awayTeam": {"id": 67203554, "name": "Kustov D."}, "startTimestamp": 1791763200, "status": "finished"}

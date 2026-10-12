@@ -1,1 +1,1 @@
-{"message":"Unauthorized","http_status_code":401}
+{"statusCode":400,"message":["property date should not exist"],"error":"Bad Request","path":"/api/v1/table_tennis/events?date=2026-10-12","timestamp":"2026-10-12T14:51:54.489Z","requestId":"aed32e27-36e1-44fa-8005-0acb88965ee3"}
