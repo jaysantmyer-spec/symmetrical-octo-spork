@@ -1,5 +1,11 @@
 """
-Per-game point scores for TT Elite Series matches, from a licensed data vendor (BetsAPI, token in BETSAPI_TOKEN).
+Per-game point scores for TT Elite Series matches, from a licensed data vendor.
+
+Providers (picked by POINTS_PROVIDER, default: whichever key is set):
+  * sportsapi365 - key in SPORTSAPI365_KEY (header X-API-Key). Tournament 57948020 "TT Elite Series";
+    GET /unique-tournament/{id}/scheduled-events/{YYYY-MM-DD}?page=&limit=100 returns every match of the day with
+    homeScore/awayScore.period1..5 (points per game). Verified Oct 2026.
+  * betsapi      - token in BETSAPI_TOKEN (unverified parser, kept as an alternative).
 
 tt-series.com publishes only set scores (3:1). Points per game (11-9, 8-11, ...) unlock: total-points markets,
 "won game 1 -> won match" statistics, close-game (deuce) records and sharper ratings. This module
@@ -34,15 +40,108 @@ COLS = ["event_id", "date", "start_time", "league", "player_1", "player_2", "set
 LAST_LOG: list[str] = []
 
 
-def token() -> str | None:
-    t = os.getenv("BETSAPI_TOKEN")
+def _secret(name: str) -> str | None:
+    t = os.getenv(name)
     if not t:
         try:
             import streamlit as st
-            t = st.secrets.get("BETSAPI_TOKEN")
+            t = st.secrets.get(name)
         except Exception:
             t = None
     return (t or "").strip() or None
+
+
+def provider() -> str | None:
+    p = os.getenv("POINTS_PROVIDER", "").strip().lower()
+    if p:
+        return p
+    if _secret("SPORTSAPI365_KEY"):
+        return "sportsapi365"
+    if _secret("BETSAPI_TOKEN"):
+        return "betsapi"
+    return None
+
+
+def token() -> str | None:
+    """A key for whichever provider is configured (None = points feed off)."""
+    return {"sportsapi365": _secret("SPORTSAPI365_KEY"), "betsapi": _secret("BETSAPI_TOKEN")}.get(provider() or "", None)
+
+
+# --------------------------------------------------------------------------- SportsAPI365
+SAPI_BASE = "https://api.sportsapi365.com/v1/table-tennis"
+SAPI_TOURNAMENT = int(os.getenv("SPORTSAPI365_TT_ELITE_ID", "57948020"))
+SAPI_BUDGET = int(os.getenv("SPORTSAPI365_BUDGET", "400"))        # requests per run (backfill resumes next run)
+_sapi_used = 0
+
+
+class QuotaExhausted(RuntimeError):
+    pass
+
+
+def _sapi_get(path: str, **params) -> dict:
+    global _sapi_used
+    if _sapi_used >= SAPI_BUDGET:
+        raise QuotaExhausted(f"run budget of {SAPI_BUDGET} requests reached")
+    r = requests.get(f"{SAPI_BASE}/{path}", headers={"X-API-Key": _secret("SPORTSAPI365_KEY") or "", "Accept": "application/json"},
+                     params=params, timeout=40)
+    _sapi_used += 1
+    if r.status_code == 429:
+        raise QuotaExhausted("provider rate limit / quota (HTTP 429)")
+    r.raise_for_status()
+    return r.json()
+
+
+def _name_from_slug(slug: str, short: str) -> str:
+    """'karpiuk-mateusz' -> 'Mateusz Karpiuk' (our names are first-name first); fall back to 'Karpiuk M.'."""
+    parts = [p for p in str(slug or "").split("-") if p]
+    if len(parts) >= 2:
+        return fold(" ".join(parts[1:] + parts[:1]))
+    return fold(short or slug or "")
+
+
+def _parse_sapi_event(ev: dict) -> dict | None:
+    try:
+        st = ev.get("status") or {}
+        if str(st.get("type") or ev.get("statusType") or "").lower() != "finished":
+            return None
+        hs, as_ = ev.get("homeScore") or {}, ev.get("awayScore") or {}
+        games = []
+        for k in range(1, 8):
+            h, a = hs.get(f"period{k}"), as_.get(f"period{k}")
+            if h is None or a is None:
+                break
+            games.append((int(h), int(a)))
+        games = [g for g in games if max(g) >= 11 or sum(g) >= 20]
+        s1, s2 = hs.get("current"), as_.get("current")
+        if len(games) < 3 or s1 is None or s2 is None:
+            return None
+        s1, s2 = int(s1), int(s2)
+        if sum(1 for g in games if g[0] > g[1]) != s1 or sum(1 for g in games if g[1] > g[0]) != s2:
+            return None                                                       # games inconsistent with the set score
+        start = pd.to_datetime(int(ev["startTimestamp"]), unit="s", utc=True).tz_convert("Europe/Warsaw").tz_localize(None)
+        ht, at = ev.get("homeTeam") or {}, ev.get("awayTeam") or {}
+        return {"event_id": f"sapi{ev.get('id')}", "date": start.normalize(), "start_time": start,
+                "league": (ev.get("tournament") or {}).get("name") or "TT Elite Series",
+                "player_1": _name_from_slug(ht.get("slug"), ht.get("name")), "player_2": _name_from_slug(at.get("slug"), at.get("name")),
+                "sets_1": s1, "sets_2": s2, "games": json.dumps(games), "n_games": len(games),
+                "points_1": sum(g[0] for g in games), "points_2": sum(g[1] for g in games),
+                "first_game_winner": 1 if games[0][0] > games[0][1] else 2,
+                "deuce_games": sum(1 for g in games if min(g) >= 10), "match_id": None}
+    except Exception:
+        return None
+
+
+def fetch_day_sapi(day: str) -> pd.DataFrame:
+    """All finished TT Elite matches on `day` (YYYY-MM-DD), every page."""
+    rows, page = [], 1
+    while page <= 10:
+        d = _sapi_get(f"unique-tournament/{SAPI_TOURNAMENT}/scheduled-events/{day}", page=page, limit=100)
+        evs = d.get("events") or []
+        rows += [r for r in (_parse_sapi_event(e) for e in evs) if r]
+        if not d.get("hasMore") or not evs:
+            break
+        page += 1
+    return pd.DataFrame(rows, columns=COLS)
 
 
 def _get(path: str, **params) -> dict:
@@ -168,19 +267,30 @@ def link(points: pd.DataFrame, matches: pd.DataFrame) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- jobs
+def _fetch_for_day(day_ts: pd.Timestamp, leagues) -> pd.DataFrame:
+    if provider() == "sportsapi365":
+        return fetch_day_sapi(day_ts.strftime("%Y-%m-%d"))
+    return fetch_day(day_ts.strftime("%Y%m%d"), leagues)
+
+
+def _leagues() -> list:
+    if provider() == "sportsapi365":
+        return [SAPI_TOURNAMENT]
+    return league_ids()
+
+
 def update(days_back: int = 3, matches: pd.DataFrame | None = None) -> dict:
     global LAST_LOG
-    LAST_LOG = []
-    leagues = league_ids()
-    LAST_LOG.append(f"TT Elite league ids at vendor: {leagues}")
+    LAST_LOG = [f"provider: {provider()}"]
+    leagues = _leagues()
     if not leagues:
-        return {"error": "no league matched BETSAPI_LEAGUE_RE", "log": LAST_LOG}
+        return {"error": "no league matched", "log": LAST_LOG}
     today = pd.Timestamp.now(tz="Europe/Warsaw").tz_localize(None).normalize()
     new = []
     for d in range(days_back, -1, -1):
-        day = (today - pd.Timedelta(days=d)).strftime("%Y%m%d")
+        day = (today - pd.Timedelta(days=d)).strftime("%Y-%m-%d")
         try:
-            df = fetch_day(day, leagues)
+            df = _fetch_for_day(today - pd.Timedelta(days=d), leagues)
             LAST_LOG.append(f"{day}: {len(df)} matches with games")
             new.append(df)
         except Exception as ex:
@@ -200,25 +310,28 @@ def update(days_back: int = 3, matches: pd.DataFrame | None = None) -> dict:
 def backfill(days: int = 365, matches: pd.DataFrame | None = None, progress=None) -> dict:
     """History, newest day first; safe to re-run (days already on file are skipped)."""
     global LAST_LOG
-    LAST_LOG = []
-    leagues = league_ids()
+    LAST_LOG = [f"provider: {provider()}"]
+    leagues = _leagues()
     if not leagues:
         return {"error": "no league matched", "log": LAST_LOG}
     have = store.read(POINTS_CSV)
-    done_days = set(pd.to_datetime(have["date"]).dt.strftime("%Y%m%d")) if not have.empty else set()
+    done_days = set(pd.to_datetime(have["date"]).dt.strftime("%Y-%m-%d")) if not have.empty else set()
     today = pd.Timestamp.now(tz="Europe/Warsaw").tz_localize(None).normalize()
     frames, pulled = [have] if not have.empty else [], 0
     for d in range(1, days + 1):
-        day = (today - pd.Timedelta(days=d)).strftime("%Y%m%d")
+        day_ts = today - pd.Timedelta(days=d); day = day_ts.strftime("%Y-%m-%d")
         if day in done_days:
             continue
         if progress and d % 10 == 0:
             progress(d / days, day)
         try:
-            frames.append(fetch_day(day, leagues)); pulled += 1
-        except Exception as ex:
+            df = _fetch_for_day(day_ts, leagues); frames.append(df); pulled += 1
+            if df.empty:
+                LAST_LOG.append(f"{day}: no finished matches")
+        except (QuotaExhausted, Exception) as ex:
             LAST_LOG.append(f"{day}: {ex}")
-            if "limit" in str(ex).lower() or "quota" in str(ex).lower():
+            if isinstance(ex, QuotaExhausted) or "limit" in str(ex).lower() or "quota" in str(ex).lower() or "429" in str(ex):
+                LAST_LOG.append("stopping; the next refresh continues the backfill")
                 break
     allp = pd.concat(frames, ignore_index=True).drop_duplicates("event_id", keep="last") if frames else pd.DataFrame(columns=COLS)
     if matches is None:

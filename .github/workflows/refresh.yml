@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BETSAPI_TOKEN: ${{ secrets.BETSAPI_TOKEN }}
+      SPORTSAPI365_KEY: ${{ secrets.SPORTSAPI365_KEY }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

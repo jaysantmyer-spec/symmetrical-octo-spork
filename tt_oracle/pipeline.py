@@ -166,8 +166,10 @@ def run_cycle(progress=None, scrape: bool = True, odds: bool = True) -> dict:
     from .points import token as _points_token
     if _points_token():
         try:
-            from .points import update as points_update
+            from .points import update as points_update, backfill as points_backfill
             out["points"] = points_update()
+            bf = points_backfill(365)                       # resumes the history pull until a year is on file
+            out["points_backfill"] = {k: bf.get(k) for k in ("days_pulled", "total", "linked")}
         except Exception as ex:
             out["points"] = f"failed: {ex}"
     if odds:

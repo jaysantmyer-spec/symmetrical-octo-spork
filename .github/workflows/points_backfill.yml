@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 120
     env:
       BETSAPI_TOKEN: ${{ secrets.BETSAPI_TOKEN }}
+      SPORTSAPI365_KEY: ${{ secrets.SPORTSAPI365_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

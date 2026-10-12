@@ -156,6 +156,8 @@ def parse_page(html: str, post_id: int, title: str, url: str = "", post_date: st
             minutes = int(hh) * 60 + int(mm)
             if minutes < prev_minutes - 120:   # night sessions run past midnight: 23:50 -> 00:10
                 day_offset += 1
+            if prev_minutes < 0 and meta["session"] == "night" and minutes < 12 * 60:
+                day_offset = 1                 # a night session that starts after midnight is dated by the evening before
             prev_minutes = minutes
             order += 1
             rows.append({"post_id": int(post_id), "seq": meta["seq"], "date": meta["date"], "session": meta["session"],
