@@ -25,6 +25,23 @@ def walk(o, want):
         for v in o: yield from walk(v, want)
 
 out.append(f"key set: {bool(KEY)} len {len(KEY)}")
+# auth variants on one cheap endpoint
+for label, hdr, params, base in (("X-Gravitee-Api-Key", {"X-Gravitee-Api-Key": KEY}, {}, BASE),
+                                 ("X-API-Key", {"X-API-Key": KEY}, {}, BASE),
+                                 ("x-api-key", {"x-api-key": KEY}, {}, BASE),
+                                 ("Authorization Bearer", {"Authorization": f"Bearer {KEY}"}, {}, BASE),
+                                 ("Authorization ApiKey", {"Authorization": f"ApiKey {KEY}"}, {}, BASE),
+                                 ("query api-key", {}, {"api-key": KEY}, BASE),
+                                 ("query apiKey", {}, {"apiKey": KEY}, BASE),
+                                 ("query api_key", {}, {"api_key": KEY}, BASE),
+                                 ("gravitee + base /table-tennis/v1", {"X-Gravitee-Api-Key": KEY}, {}, "https://api.sportsapi365.com/table-tennis/v1"),
+                                 ("gravitee + base /v1 (no sport)", {"X-Gravitee-Api-Key": KEY}, {}, "https://api.sportsapi365.com/v1"),
+                                 ("gravitee + tennis (is the key for another sport?)", {"X-Gravitee-Api-Key": KEY}, {}, "https://api.sportsapi365.com/v1/tennis")):
+    try:
+        r = requests.get(f"{base}/fixtures/today", headers={**hdr, "Accept": "application/json"}, params=params, timeout=30)
+        out.append(f"auth {label:48} -> {r.status_code} {scrub(r.text[:160])!r}")
+    except Exception as ex:
+        out.append(f"auth {label:48} -> EXC {ex}")
 today = pd.Timestamp.now(tz="Europe/Warsaw").strftime("%Y-%m-%d")
 yday = (pd.Timestamp.now(tz="Europe/Warsaw") - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
 # 1. search / competitions for TT Elite
