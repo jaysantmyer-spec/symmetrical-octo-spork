@@ -24,6 +24,8 @@ def walk(o, want):
     elif isinstance(o, list):
         for v in o: yield from walk(v, want)
 
+import atexit
+atexit.register(lambda: Path("data/raw/probe_sapi.txt").write_text("\n".join(out)))
 out.append(f"key set: {bool(KEY)} len {len(KEY)}")
 # auth variants on one cheap endpoint
 for label, hdr, params, base in (("X-Gravitee-Api-Key", {"X-Gravitee-Api-Key": KEY}, {}, BASE),
@@ -93,7 +95,9 @@ for tid in tids[:25]:
             out.append(f"   tournament {tid}: {nm}")
             break
 # per-game scores: take any ended event and dump it fully
-ended = [e for e in items if str(e.get("status", {}).get("type", e.get("status"))).lower() in ("finished", "ended", "ft")] or items[:1]
+def _st(e):
+    st = e.get("status"); return str(st.get("type") or st.get("description") or st) if isinstance(st, dict) else str(st)
+ended = [e for e in items if _st(e).lower() in ("finished", "ended", "ft")] or items[:1]
 if ended:
     out.append("ENDED/sample event full: " + scrub(json.dumps(ended[0])[:3000]))
 Path("data/raw/probe_sapi.txt").write_text("\n".join(out))
