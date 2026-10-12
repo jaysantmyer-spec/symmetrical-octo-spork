@@ -12,4 +12,9 @@ jobs:
       - run: python scripts/probe_h2h.py
       - run: |
           git config user.name "tt-oracle-bot"; git config user.email "bot@users.noreply.github.com"
-          git add -f data/raw/probe_h2h.txt data/raw/h2h_page.html data/raw/h2h_result.html && git commit -m "probe h2h" && git pull --rebase origin main && git push || true
+          git add -f data/raw/probe_h2h.txt || true
+          git add -f data/raw/h2h_page.html || true
+          git add -f data/raw/h2h_result.html || true
+          git commit -m "probe h2h" || echo nothing
+          git pull --rebase origin main || true
+          git push || true
