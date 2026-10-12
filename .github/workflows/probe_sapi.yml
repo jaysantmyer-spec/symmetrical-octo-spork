@@ -1,0 +1,20 @@
+name: probe sportsapi365 (table tennis coverage)
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      SPORTSAPI365_KEY: ${{ secrets.SPORTSAPI365_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install requests pandas
+      - run: python scripts/probe_sportsapi365.py
+      - run: |
+          git config user.name "tt-oracle-bot"; git config user.email "bot@users.noreply.github.com"
+          git add -f data/raw/probe_sapi.txt data/raw/sapi_*.json || true
+          git commit -m "probe sportsapi365" || echo nothing
+          git pull --rebase origin main || true
+          git push || true
