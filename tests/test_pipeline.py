@@ -41,12 +41,37 @@ m["start_time"] = m["start_time"] + shift
 m["date"] = m["start_time"].dt.normalize()
 config.ensure_dirs(); store.write(m, config.MATCHES_CSV)
 print("matches", len(m), "finished", int(m.finished.sum()))
+# ---- vendor points feed (synthetic): games consistent with the set score, the stronger player scores more
+import json as _json
+from tt_oracle import points as PT
+prow = []
+for r in m[m.finished].itertuples():
+    if rng.random() > 0.8:
+        continue
+    sa, sb = int(r.sets_a), int(r.sets_b); games = []
+    order = ["a"] * sa + ["b"] * sb; rng.shuffle(order)
+    for w_ in order:
+        loser = rng.choice([4, 6, 7, 8, 9, 9, 10, 11, 12])
+        g = (11 if loser < 10 else loser + 2, loser) if w_ == "a" else (loser, 11 if loser < 10 else loser + 2)
+        games.append(g)
+    prow.append({"event_id": f"ev{r.match_id}", "date": pd.Timestamp(r.start_time).normalize(), "start_time": r.start_time, "league": "TT Elite Series",
+                 "player_1": r.player_a, "player_2": r.player_b, "sets_1": sa, "sets_2": sb, "games": _json.dumps(games), "n_games": len(games),
+                 "points_1": sum(g[0] for g in games), "points_2": sum(g[1] for g in games), "first_game_winner": 1 if games[0][0] > games[0][1] else 2,
+                 "deuce_games": sum(1 for g in games if min(g) >= 10), "match_id": None})
+pts = PT.link(pd.DataFrame(prow, columns=PT.COLS), m)
+store.write(pts, PT.POINTS_CSV)
+print("points rows", len(pts), "linked", int(pts.match_id.notna().sum()))
+assert pts.match_id.notna().mean() > 0.95
 
+m = pipeline.load_matches()
+assert "points_a" in m.columns and m["n_games"].notna().sum() > 1000
 feat = build_features(m)
+assert feat["total_points"].notna().sum() > 1000 and "A_ppg_for" in feat
 assert len(feat) == len(m) and feat["y"].notna().sum() == m.finished.sum()
 assert (feat["A_career_n"] >= 0).all()
 pred = M.train(feat, ["logreg", "hgb"])
-print("trained on", pred.meta["n_train"])
+print("trained on", pred.meta["n_train"], "points model:", pred.meta["points_model"])
+assert pred.meta["points_model"]
 bt = pipeline.walk_forward(feat, feat.start_time.min() + pd.Timedelta(days=45), step_days=7, learners=["logreg", "hgb"])
 s = pipeline.summarize(bt)
 print(f"backtest: n={s['matches']} acc={s['accuracy']:.3f} ll={s['log_loss']:.3f} elo_acc={s['elo_accuracy']:.3f}")
@@ -59,6 +84,8 @@ txt = f"{up.iloc[0].player_a} -150 / {up.iloc[0].player_b} +120\n{up.iloc[1].pla
 odds = dk.parse_pasted(txt); assert len(odds) == 2, odds
 dk.snapshot_odds(odds)
 P = pipeline.predict_upcoming(pred)
+print(P[["player_a", "player_b", "p_a", "exp_total_points", "p_a_if_g1", "p_a_if_lost_g1"]].head(3).round(2).to_string(index=False))
+assert P["exp_total_points"].between(60, 130).all() and (P["p_a_if_g1"] > P["p_a_if_lost_g1"]).all()
 assert P["market_p_a"].notna().sum() == 2, P[["player_a", "player_b", "dk_odds_a", "market_p_a"]].head()
 pr = dk.price(P.head(3), 1000)
 print(pr[["player", "fair", "market", "dk", "edge", "stake", "bet"]].to_string(index=False))
@@ -71,3 +98,18 @@ g = pipeline.grade_ledger(); print("graded", g)
 assert g["graded_now"] == len(led)
 print("relearn", pipeline.relearn(min_graded=10)["updated"])
 print("OK ->", tmp)
+
+# ---- market blend: fake closing lines for 400 finished matches (market slightly informative), then fit
+from tt_oracle import market as MK
+fin = store.read(config.MATCHES_CSV); fin = fin[fin.finished.astype(bool)].sample(400, random_state=1)
+hist = pd.DataFrame({"event_id": None, "commence_time": fin.start_time.values, "player_1": fin.player_a.values, "player_2": fin.player_b.values,
+                     "odds_1": [1 / (0.5 + 0.3 * (1 if w == "a" else -1) * rng.random()) for w in fin.winner], "odds_2": 2.0,
+                     "league": "x", "bookmaker": "DraftKings", "fetched_at": pd.to_datetime(fin.start_time.values) - pd.Timedelta(minutes=30)})
+store.write(hist, config.ODDS_HISTORY_CSV)
+cl = MK.closing_lines(pipeline.load_matches(), hist); print("closing lines", len(cl)); assert len(cl) >= 380, len(cl)
+fake = cl.merge(pipeline.load_matches()[["match_id", "winner"]], on="match_id"); fake["y"] = (fake.winner == "a").astype(float)
+fake["p_a"] = (0.5 + 0.2 * (fake.y - 0.5) + np.random.RandomState(0).rand(len(fake)) * 0.1 - 0.05).clip(0.05, 0.95)
+fake = fake[["match_id", "y", "p_a"]]
+b = MK.fit_blend(fake, cl); print("blend", {k: (round(v, 3) if isinstance(v, float) else v) for k, v in b.items()}); assert b["ready"]
+Pb = MK.apply_blend(P.assign(market_p_a=0.6), b); assert Pb["p_blend"].notna().all()
+print("market OK")

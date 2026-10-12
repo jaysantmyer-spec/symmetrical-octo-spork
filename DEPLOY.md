@@ -68,3 +68,19 @@ python scripts/push_lines.py         # once;  or:  python scripts/push_lines.py 
 It commits `data/odds.csv` (and appends `data/odds_history.csv`). The app re-reads it within a minute, matches the
 lines to the day's cards, and the next refresh prices its predictions against them. Leave `--loop 10` running in a
 terminal on match days.
+
+## Per-game points feed (vendor)
+
+tt-series.com publishes set scores only. Per-game points (11-9, 8-11, …) come from a licensed vendor — BetsAPI
+(betsapi.com; table tennis sport id 92, league "TT Elite Series"). Add the token as a repository secret
+`BETSAPI_TOKEN`, run the **points backfill** workflow once (a year of history), and the 6-hourly refresh keeps it
+current. With ≥1,500 linked matches the model adds: expected total points, P(win | wins game 1), deuce-game
+records, points-per-game form. Raw responses are kept in `data/raw/betsapi_*.json` for checking the parser on
+the first run; `BETSAPI_LEAGUE_IDS` / `BETSAPI_LEAGUE_RE` override league discovery.
+
+## Market blend
+
+Lines pushed by `scripts/push_lines.py` accumulate in `data/odds_history.csv`; each refresh derives the closing
+line per match (`data/closing_lines.csv`) and, once 300 graded predictions have one, fits a model × market
+blend (`models/market_blend.json`) shown on the cards as "Model × market blend". The ledger keeps grading the
+pure model so the two stay comparable.

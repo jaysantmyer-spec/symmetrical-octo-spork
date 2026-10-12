@@ -35,6 +35,13 @@ def load_matches() -> pd.DataFrame:
     m["start_time"] = pd.to_datetime(m["start_time"])
     m["finished"] = m["finished"].astype(bool)
     m, _ = canonicalize(m)
+    try:                                                   # per-game points from the vendor feed, when present
+        from .points import load_linked
+        pts = load_linked()
+        if not pts.empty:
+            m = m.merge(pts, on="match_id", how="left")
+    except Exception as ex:
+        log.warning("points not merged: %s", ex)
     return m
 
 
@@ -74,7 +81,8 @@ def predict_upcoming(pred: M.Predictor | None = None, log_to_ledger: bool = True
     P = pred.predict(up)
     if not P.empty:
         from .dk import attach_market
-        P = attach_market(P)
+        from .market import apply_blend
+        P = apply_blend(attach_market(P))
         store.write(P, config.PREDICTIONS_CSV)
         if log_to_ledger:
             log_predictions(P, pred.meta.get("version", ""))
@@ -155,6 +163,13 @@ def run_cycle(progress=None, scrape: bool = True, odds: bool = True) -> dict:
     if scrape:
         from .scraper import update
         out["scrape"] = update(pages=3, progress=progress)
+    from .points import token as _points_token
+    if _points_token():
+        try:
+            from .points import update as points_update
+            out["points"] = points_update()
+        except Exception as ex:
+            out["points"] = f"failed: {ex}"
     if odds:
         try:
             from .dk import snapshot_odds
@@ -162,6 +177,12 @@ def run_cycle(progress=None, scrape: bool = True, odds: bool = True) -> dict:
         except Exception as ex:
             out["odds"] = f"failed: {ex}"
     out["grade"] = grade_ledger()
+    try:                                                   # closing lines -> model x market blend
+        from .market import closing_lines, fit_blend
+        cl = closing_lines(load_matches())
+        out["market"] = fit_blend(store.read(config.LEDGER_CSV), cl) or {"n": int(len(cl)), "ready": False}
+    except Exception as ex:
+        out["market"] = f"failed: {ex}"
     out["learn"] = relearn()
     pred = retrain()
     out["model"] = pred.meta
@@ -201,6 +222,8 @@ def walk_forward(feat: pd.DataFrame, start, end=None, step_days: int = 7, learne
                       weights=weights, temperature=temp)
         P = mdl.predict(rows)
         P["sets_a"], P["sets_b"] = rows["sets_a"].to_numpy(), rows["sets_b"].to_numpy()
+        for c in ("total_points", "first_game_a"):
+            P[c] = rows[c].to_numpy() if c in rows else np.nan
         P["train_cutoff"] = lo
         preds.append(P)
     if progress:
@@ -239,6 +262,15 @@ def summarize(bt: pd.DataFrame) -> dict:
                           "over35_calls": int((g["over35"] >= 0.7).sum()),
                           "under45_hit_when_called": float((ng < 5)[g["over45"] <= 0.25].mean()) if (g["over45"] <= 0.25).any() else float("nan"),
                           "under45_calls": int((g["over45"] <= 0.25).sum())}
+    if "exp_total_points" in bt and bt["exp_total_points"].notna().sum() >= 50:
+        q = bt.dropna(subset=["exp_total_points", "total_points"])
+        g1 = bt.dropna(subset=["p_a_if_g1", "first_game_a"])
+        cond = np.where(g1["first_game_a"] == 1, g1["p_a_if_g1"], g1["p_a_if_lost_g1"])
+        s["points"] = {"n": int(len(q)), "total_points_mae": float((q["exp_total_points"] - q["total_points"]).abs().mean()),
+                       "total_points_mean": float(q["total_points"].mean()),
+                       "after_game1_accuracy": float(((cond >= 0.5) == (g1["y"] == 1)).mean()) if len(g1) else float("nan"),
+                       "pre_match_accuracy_same": float(((g1["p_a"] >= 0.5) == (g1["y"] == 1)).mean()) if len(g1) else float("nan"),
+                       "after_game1_log_loss": float(_ll(cond, g1["y"]).mean()) if len(g1) else float("nan")}
     if "market_p_a" in bt and bt["market_p_a"].notna().sum() >= 30:
         mk = bt[bt["market_p_a"].notna()]
         s["market_accuracy"] = float(((mk["market_p_a"] >= 0.5) == mk["y"]).mean())

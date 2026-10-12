@@ -27,6 +27,8 @@ def main():
     b = sub.add_parser("backfill"); b.add_argument("--pages", type=int, default=400); b.add_argument("--keep-raw", type=int, default=3)
     u = sub.add_parser("update"); u.add_argument("--pages", type=int, default=2)
     sub.add_parser("odds")
+    pb = sub.add_parser("points-backfill"); pb.add_argument("--days", type=int, default=365)
+    sub.add_parser("points-update")
     sub.add_parser("train")
     pr = sub.add_parser("predict"); pr.add_argument("--no-log", action="store_true")
     bt = sub.add_parser("backtest"); bt.add_argument("--days", type=int, default=60); bt.add_argument("--step", type=int, default=7)
@@ -43,6 +45,12 @@ def main():
     elif a.cmd == "odds":
         from .dk import snapshot_odds
         print(json.dumps(snapshot_odds(), indent=2))
+    elif a.cmd == "points-backfill":
+        from . import points
+        print(json.dumps(points.backfill(a.days, progress=_p), indent=2, default=str))
+    elif a.cmd == "points-update":
+        from . import points
+        print(json.dumps(points.update(), indent=2, default=str))
     elif a.cmd == "train":
         print(pipeline.retrain().meta)
     elif a.cmd == "predict":

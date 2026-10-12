@@ -20,7 +20,12 @@ import pandas as pd
 from . import config
 
 DIFF_FEATURES = ["elo", "elo_form", "win10", "win30d", "setr30", "today_n", "hrs_since", "days_since",
-                 "career_n", "h2h_net", "session_win", "venue_win", "streak", "elo_set", "bt"]
+                 "career_n", "h2h_net", "session_win", "venue_win", "streak", "elo_set", "bt",
+                 "ppg_for", "ppg_against", "g1_win", "g1_conv", "deuce_win"]
+POINTS_FEATURES = ["ppg_for", "ppg_against", "g1_win", "g1_conv", "deuce_win"]   # need the vendor points feed
+# ppg_for / ppg_against: points scored / conceded per game, last 20 matches with points data
+# g1_win: share of first games won (last 20); g1_conv: share of matches won after winning game 1 (last 40)
+# deuce_win: win rate in games that reached 10-10 (last 40 matches)
 # elo_set: a second Elo updated set by set (a 3-2 and a 3-0 move it differently and it learns faster)
 # bt: rolling Bradley-Terry strength (see add_bt), refit weekly on the trailing 180 days.
 # Tested and left out (no out-of-sample gain, Oct 2026): opponent-adjusted form (perf10), strength of schedule
@@ -35,7 +40,7 @@ def _expected(ra: float, rb: float) -> float:
 
 
 class _P:
-    __slots__ = ("elo", "elo_set", "hist", "elo_hist", "today", "last_time", "n", "sess", "venue", "streak")
+    __slots__ = ("elo", "elo_set", "hist", "elo_hist", "today", "last_time", "n", "sess", "venue", "streak", "pts")
 
     def __init__(self):
         self.elo = 1500.0
@@ -48,6 +53,20 @@ class _P:
         self.sess = defaultdict(lambda: [0, 0])
         self.venue = defaultdict(lambda: [0, 0])
         self.streak = 0
+        self.pts = deque(maxlen=40)        # (ppg_for, ppg_against, won_g1, won_match, deuce_w, deuce_n)
+
+
+def _points_feats(p: _P) -> dict:
+    q = list(p.pts)
+    if not q:
+        return {"ppg_for": 9.6, "ppg_against": 9.6, "g1_win": 0.5, "g1_conv": 0.75, "deuce_win": 0.5}
+    last20 = q[-20:]
+    g1 = [x for x in q if x[2]]
+    dw, dn = sum(x[4] for x in q), sum(x[5] for x in q)
+    return {"ppg_for": np.mean([x[0] for x in last20]), "ppg_against": np.mean([x[1] for x in last20]),
+            "g1_win": np.mean([x[2] for x in last20]),
+            "g1_conv": (sum(x[3] for x in g1) + 3) / (len(g1) + 4),      # shrunk toward 0.75
+            "deuce_win": (dw + 1) / (dn + 2)}
 
 
 def _side_feats(p: _P, now: pd.Timestamp, session: str, venue: str, win_mean_default=0.5) -> dict:
@@ -76,6 +95,7 @@ def _side_feats(p: _P, now: pd.Timestamp, session: str, venue: str, win_mean_def
         "venue_win": (v[0] + 1) / (v[1] + 2),
         "streak": p.streak,
         "elo_set": p.elo_set,
+        **_points_feats(p),
         "perf10": np.mean([x[1] - x[4] for x in last10]) if last10 else 0.0,
         "opp_elo10": np.mean([x[5] for x in last10]) if last10 else 1500.0,
         "today_w": today_w,
@@ -106,7 +126,9 @@ def build_features(matches: pd.DataFrame, elo_k: float | None = None, with_bt: b
                "session": sess, "venue": venue, "player_a": a, "player_b": b,
                "finished": bool(r.finished), "sets_a": r.sets_a, "sets_b": r.sets_b,
                "y": (1.0 if r.winner == "a" else 0.0 if r.winner == "b" else np.nan),
-               "elo_p_a": _expected(pa.elo, pb.elo), "h2h_n": hn}
+               "elo_p_a": _expected(pa.elo, pb.elo), "h2h_n": hn,
+               "total_points": (float(r.points_a) + float(r.points_b)) if getattr(r, "n_games", None) is not None and not pd.isna(getattr(r, "n_games", np.nan)) else np.nan,
+               "first_game_a": (1.0 if int(r.first_game_winner) == 1 else 0.0) if getattr(r, "first_game_winner", None) is not None and not pd.isna(getattr(r, "first_game_winner", np.nan)) else np.nan}
         for kf in DIFF_FEATURES:
             if kf == "bt":
                 continue                                   # filled by add_bt after the walk
@@ -137,6 +159,14 @@ def build_features(matches: pd.DataFrame, elo_k: float | None = None, with_bt: b
                 p.sess[sess][0] += int(won); p.sess[sess][1] += 1
                 p.venue[venue][0] += int(won); p.venue[venue][1] += 1
                 p.streak = (p.streak + 1 if p.streak >= 0 else 1) if won else (p.streak - 1 if p.streak <= 0 else -1)
+            # per-game points (vendor feed), when this match has them
+            ng = getattr(r, "n_games", None)
+            if ng is not None and not pd.isna(ng) and ng >= 3:
+                pa_, pb_ = float(r.points_a), float(r.points_b)
+                g1a = int(r.first_game_winner) == 1
+                dw_a, dw_b, dn = int(r.deuce_w_a), int(r.deuce_w_b), int(r.deuce_games)
+                pa.pts.append((pa_ / ng, pb_ / ng, g1a, won_a, dw_a, dn))
+                pb.pts.append((pb_ / ng, pa_ / ng, not g1a, not won_a, dw_b, dn))
             if key[0] == a:
                 h2h[key][0] += int(won_a)
             else:
@@ -184,7 +214,8 @@ def matchup_row(sa: pd.Series, sb: pd.Series, h2h_a_wins: int, h2h_n: int, sessi
                 hrs = (now - pd.Timestamp(s["start_time"])).total_seconds() / 3600
                 v = min(hrs, 96.0) if k == "hrs_since" else min(hrs / 24.0, 30.0)
             else:
-                v = float(s[k]) if k in s and pd.notna(s[k]) else {"elo_set": float(s["elo"]), "opp_elo10": 1500.0}.get(k, 0.0)
+                v = float(s[k]) if k in s and pd.notna(s[k]) else {"elo_set": float(s["elo"]), "opp_elo10": 1500.0, "ppg_for": 9.6,
+                                                                   "ppg_against": 9.6, "g1_win": 0.5, "g1_conv": 0.75, "deuce_win": 0.5}.get(k, 0.0)
             row[f"{side}_{k}"] = v
     for k in DIFF_FEATURES:
         row[f"d_{k}"] = row[f"A_{k}"] - row[f"B_{k}"]

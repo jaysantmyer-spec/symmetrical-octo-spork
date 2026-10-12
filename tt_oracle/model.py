@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -136,6 +136,22 @@ def _games_matrix(df: pd.DataFrame) -> np.ndarray:
     return g[GAMES_COLS].to_numpy(float)
 
 
+def _points_matrix(df: pd.DataFrame, p_a: np.ndarray, games: np.ndarray) -> np.ndarray:
+    """Expected number of games and the pair's points-per-game profile -> total points."""
+    exp_games = games @ np.array([3.0, 4.0, 5.0])
+    pair_ppg = 0.5 * (df["A_ppg_for"].to_numpy(float) + df["B_ppg_against"].to_numpy(float)) + \
+               0.5 * (df["B_ppg_for"].to_numpy(float) + df["A_ppg_against"].to_numpy(float))
+    close = np.abs(np.asarray(p_a, float) - 0.5)
+    return np.column_stack([exp_games, pair_ppg, exp_games * pair_ppg, close, df["A_deuce_win"].to_numpy(float) + df["B_deuce_win"].to_numpy(float),
+                            games[:, 0], games[:, 2]])
+
+
+def _g1_matrix(df: pd.DataFrame, p_a: np.ndarray, first_game_a: np.ndarray) -> np.ndarray:
+    z = _logit(np.asarray(p_a, float))
+    fg = np.asarray(first_game_a, float) * 2 - 1                                  # +1 A won game 1, -1 B did
+    return np.column_stack([z, fg, z * fg, fg * df["A_g1_conv"].to_numpy(float), -fg * df["B_g1_conv"].to_numpy(float)])
+
+
 def _iid_games(p_a: np.ndarray) -> np.ndarray:
     """Fallback: best-of-5 with an independent per-game probability implied by the match probability."""
     qs = np.linspace(0.01, 0.99, 981)
@@ -158,6 +174,8 @@ class Predictor:
     temperature: float = 1.0
     meta: dict = field(default_factory=dict)
     games_model: object = None          # (logreg, hgb) multinomial on 3 / 4 / 5 games
+    points_model: object = None         # Ridge: total points in the match (needs the vendor points feed)
+    g1_model: object = None             # logistic: P(A wins | who won game 1) (needs the vendor points feed)
 
     def games(self, df: pd.DataFrame, p_a: np.ndarray) -> np.ndarray:
         gm = getattr(self, "games_model", None)
@@ -215,6 +233,17 @@ class Predictor:
         S = np.column_stack(list(scores.values())); names = np.array(list(scores))
         out["likely_score"] = names[S.argmax(axis=1)]
         out["likely_score_p"] = S.max(axis=1)
+        # points-feed models (None until the vendor feed has enough linked matches)
+        pm, gm = getattr(self, "points_model", None), getattr(self, "g1_model", None)
+        if pm is not None and "A_ppg_for" in df:
+            out["exp_total_points"] = pm.predict(_points_matrix(df, p, G))
+        else:
+            out["exp_total_points"] = np.nan
+        if gm is not None and "A_g1_conv" in df:
+            out["p_a_if_g1"] = gm.predict_proba(_g1_matrix(df, p, np.ones(len(df))))[:, 1]
+            out["p_a_if_lost_g1"] = gm.predict_proba(_g1_matrix(df, p, np.zeros(len(df))))[:, 1]
+        else:
+            out["p_a_if_g1"], out["p_a_if_lost_g1"] = np.nan, np.nan
         return out
 
 
@@ -252,11 +281,21 @@ def train(feat: pd.DataFrame, learners: list[str] | None = None, cutoff=None, ha
         g_hgb = HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, max_leaf_nodes=15, min_samples_leaf=80,
                                                random_state=seed).fit(Xg, ng, sample_weight=wg)
         games_model = (g_lr, g_hgb)
+    points_model = g1_model = None
+    if "total_points" in tr and tr["total_points"].notna().sum() >= 1500 and games_model is not None:
+        pt = tr[tr["total_points"].notna() & tr["first_game_a"].notna()]
+        tmp = Predictor(models, list(learners), weights or {}, temperature, {}, games_model)
+        comp = tmp.components(pt); p_tr = blend(comp, weights, temperature); G_tr = tmp.games(pt, p_tr)
+        wp = w[tr.index.get_indexer(pt.index)]
+        points_model = Pipeline([("imp", SimpleImputer(strategy="median")), ("sc", StandardScaler()), ("r", Ridge(alpha=3.0))])
+        points_model.fit(_points_matrix(pt, p_tr, G_tr), pt["total_points"].to_numpy(float), r__sample_weight=wp)
+        g1_model = LogisticRegression(C=1.0, max_iter=2000)
+        g1_model.fit(_g1_matrix(pt, p_tr, pt["first_game_a"].to_numpy(float)), pt["y"].to_numpy(int), sample_weight=wp)
     return Predictor(models, list(learners), weights or {}, temperature, {
         "trained_at": pd.Timestamp.now().isoformat(timespec="seconds"), "n_train": int(len(tr)),
         "data_through": str(tr["start_time"].max()), "learners": list(learners), "half_life_days": hl,
         "hardness_alpha": hardness_alpha, "version": pd.Timestamp.now().strftime("%Y%m%d-%H%M%S"),
-        "games_model": games_model is not None}, games_model)
+        "games_model": games_model is not None, "points_model": points_model is not None}, games_model, points_model, g1_model)
 
 
 # --------------------------------------------------------------------------- learning state

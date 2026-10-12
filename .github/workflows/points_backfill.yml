@@ -1,0 +1,26 @@
+name: points backfill (vendor per-game scores, run once)
+on:
+  workflow_dispatch:
+    inputs:
+      days: { description: "days of history to pull", default: "365" }
+permissions: { contents: write }
+concurrency: refresh
+jobs:
+  points:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      BETSAPI_TOKEN: ${{ secrets.BETSAPI_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python -m tt_oracle points-backfill --days ${{ github.event.inputs.days }}
+      - run: python -m tt_oracle train && python -m tt_oracle backtest --days 60 && python -m tt_oracle predict || true
+      - run: |
+          git config user.name "tt-oracle-bot"; git config user.email "bot@users.noreply.github.com"
+          git add -A data models; git add -f data/raw/betsapi_*.json 2>/dev/null || true
+          git commit -m "points backfill" || echo nothing
+          git pull --rebase origin main || true
+          git push

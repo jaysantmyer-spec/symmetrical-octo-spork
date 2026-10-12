@@ -9,6 +9,8 @@ concurrency: refresh
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    env:
+      BETSAPI_TOKEN: ${{ secrets.BETSAPI_TOKEN }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

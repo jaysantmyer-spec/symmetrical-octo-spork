@@ -92,7 +92,28 @@ def card_html(r) -> str:
 <div class="names"><div class="a">{e(str(r['player_a']))}</div><div class="b">{e(str(r['player_b']))}</div></div>
 <div class="split"><div class="ra" style="width:{pa*100:.1f}%"></div><div class="rb" style="width:{(1-pa)*100:.1f}%"></div></div>
 <div class="pcts"><span style="color:{ORANGE}">{pa:.0%}</span><span style="color:{NAVY}">{1-pa:.0%}</span></div>
-<div class="line"><b>{e(str(r['pick']))}</b> ({str(r['confidence']).lower()}). Elo alone: {r['elo_p_a']:.0%}. H2H matches: {int(r['h2h_n'])}. Today so far: {int(r['A_today_n'])} / {int(r['B_today_n'])}.</div>{games_line(r)}{mk}</div>"""
+<div class="line"><b>{e(str(r['pick']))}</b> ({str(r['confidence']).lower()}). Elo alone: {r['elo_p_a']:.0%}. H2H matches: {int(r['h2h_n'])}. Today so far: {int(r['A_today_n'])} / {int(r['B_today_n'])}.</div>{games_line(r)}{points_line(r)}{mk}{blend_line(r)}</div>"""
+
+
+def blend_line(r) -> str:
+    if pd.isna(r.get("p_blend")):
+        return ""
+    pb = float(r["p_blend"])
+    return (f'<div class="line">Model × market blend: <b>{html.escape(str(r["player_a"]))} {pb:.0%}</b> / '
+            f'{html.escape(str(r["player_b"]))} {1 - pb:.0%} (learned from graded matches with a closing line)</div>')
+
+
+def points_line(r) -> str:
+    """Total points and game-1 conditionals when the vendor points feed is on."""
+    if pd.isna(r.get("exp_total_points")) and pd.isna(r.get("p_a_if_g1")):
+        return ""
+    a, b = html.escape(str(r["player_a"])), html.escape(str(r["player_b"]))
+    parts = []
+    if pd.notna(r.get("exp_total_points")):
+        parts.append(f"model total points <b>{float(r['exp_total_points']):.0f}</b>")
+    if pd.notna(r.get("p_a_if_g1")):
+        parts.append(f"if {a} takes game 1: {a} <b>{float(r['p_a_if_g1']):.0%}</b> · if {b} takes game 1: {b} <b>{1 - float(r['p_a_if_lost_g1']):.0%}</b>")
+    return '<div class="line" style="color:#5B6470">Points: ' + " · ".join(parts) + '</div>'
 
 
 def games_line(r) -> str:
@@ -428,6 +449,16 @@ with tab_track:
             mk = g[g["market_p_a"].notna()]
             st.caption(f"On {len(mk)} matches with a DraftKings line: model {mk['correct'].mean():.1%} vs market favourite "
                        f"{((mk['market_p_a'].astype(float) >= 0.5) == (mk['y'].astype(float) == 1)).mean():.1%}.")
+    from tt_oracle.market import BLEND_FILE
+    if BLEND_FILE.exists():
+        b = json.loads(BLEND_FILE.read_text())
+        st.subheader("Model × market blend")
+        if b.get("ready"):
+            st.write(f"Fitted on **{b['n']}** graded matches with a DraftKings closing line: model alone {b['acc_model']:.1%}, "
+                     f"market favourite {b['acc_market']:.1%}, blend {b['acc_blend_insample']:.1%} (in-sample). "
+                     f"Weights: model {b['w_model']:.2f}, market {b['w_market']:.2f} — the larger weight is the one the blend trusts more.")
+        else:
+            st.caption(f"Collecting closing lines: {b.get('n', 0)} graded matches have one so far (needs 300). Run scripts/push_lines.py on match days to feed it.")
     st.subheader("Walk-forward backtest")
     if bt.empty:
         st.caption("No backtest on file yet (the refresh workflow runs one weekly).")
@@ -443,6 +474,13 @@ with tab_track:
         k1.metric("75%+ picks hit rate", f"{b75['correct'].mean():.1%}", f"{len(b75):,} picks")
         k2.metric("85%+ picks hit rate", f"{b85['correct'].mean():.1%}" if len(b85) else "–", f"{len(b85):,} picks")
         st.dataframe(pipeline.calibration_table(bt).style.format({"predicted": "{:.1%}", "actual": "{:.1%}"}), hide_index=True)
+        if "points" in s:
+            ps = s["points"]
+            st.subheader("Points feed: totals and game-1 conditionals")
+            q1, q2, q3 = st.columns(3)
+            q1.metric("Total points error (avg)", f"{ps['total_points_mae']:.1f}", f"typical total {ps['total_points_mean']:.0f}")
+            q2.metric("Accuracy after game 1", f"{ps['after_game1_accuracy']:.1%}", f"{ps['after_game1_accuracy'] - ps['pre_match_accuracy_same']:+.1%} vs pre-match")
+            q3.metric("Matches with points", ps["n"])
         if "games" in s:
             gs = s["games"]
             st.subheader("Number of games (total games 3.5 / 4.5)")
