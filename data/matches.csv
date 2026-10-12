@@ -298715,7 +298715,7 @@ post_id,seq,date,session,venue,order,start_time,player_a,player_b,sets_a,sets_b,
 578616,5975.0,2026-10-12,afternoon,OSP,7,2026-10-12 13:25:00,Jakub Lamperski,Artur Sobel,1.0,3.0,578616-7,True,b
 578616,5975.0,2026-10-12,afternoon,OSP,8,2026-10-12 13:50:00,Frantisek Krcil,Bartosz Czerwinski,2.0,3.0,578616-8,True,b
 578616,5975.0,2026-10-12,afternoon,OSP,9,2026-10-12 14:15:00,Michal Minda,Radoslaw Malinowski,1.0,3.0,578616-9,True,b
-578616,5975.0,2026-10-12,afternoon,OSP,10,2026-10-12 14:40:00,Jakub Lamperski,Bartosz Czerwinski,,,578616-10,False,
+578616,5975.0,2026-10-12,afternoon,OSP,10,2026-10-12 14:40:00,Jakub Lamperski,Bartosz Czerwinski,0.0,3.0,578616-10,True,b
 578616,5975.0,2026-10-12,afternoon,OSP,11,2026-10-12 15:05:00,Frantisek Krcil,Michal Minda,,,578616-11,False,
 578616,5975.0,2026-10-12,afternoon,OSP,12,2026-10-12 15:30:00,Radoslaw Malinowski,Artur Sobel,,,578616-12,False,
 578616,5975.0,2026-10-12,afternoon,OSP,13,2026-10-12 15:55:00,Jakub Lamperski,Michal Minda,,,578616-13,False,
