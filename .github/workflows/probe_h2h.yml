@@ -1,0 +1,15 @@
+name: probe h2h (does the site have per-game points?)
+on: { workflow_dispatch: {} }
+permissions: { contents: write }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install requests
+      - run: python scripts/probe_h2h.py
+      - run: |
+          git config user.name "tt-oracle-bot"; git config user.email "bot@users.noreply.github.com"
+          git add -f data/raw/probe_h2h.txt data/raw/h2h_page.html data/raw/h2h_result.html && git commit -m "probe h2h" && git pull --rebase origin main && git push || true
