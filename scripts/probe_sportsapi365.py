@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 KEY = (os.getenv("SPORTSAPI365_KEY") or "").strip()
 BASE = "https://api.sportsapi365.com/v1/table-tennis"
-H = {"X-Gravitee-Api-Key": KEY, "Accept": "application/json"}
+H = {"X-API-Key": KEY, "Accept": "application/json"}
 out, raw = [], Path("data/raw"); raw.mkdir(parents=True, exist_ok=True)
 def scrub(t): return t.replace(KEY, "<key>") if KEY else t
 def get(path, **params):
@@ -59,7 +59,11 @@ for path, params in (("events", {"date": today}), ("events", {"date": yday}), ("
                      ("events/date/" + yday, {})):
     d = get(path, **params)
     if d:
-        evs = list(walk(d, {"homeTeam", "awayTeam"})) or list(walk(d, {"home", "away"}))
+        evs = d.get("items") if isinstance(d, dict) and isinstance(d.get("items"), list) else (list(walk(d, {"homeTeam", "awayTeam"})) or list(walk(d, {"home", "away"})))
+        if evs:
+            out.append("   event keys: " + str(sorted(evs[0].keys()))[:600])
+            tn = sorted({str((e.get("tournament") or {}).get("name") or (e.get("uniqueTournament") or {}).get("name") or e.get("tournamentName") or e.get("tournamentId")) for e in evs})
+            out.append(f"   tournaments in this list ({len(tn)}): {tn[:40]}")
         tte = [e for e in evs if "elite" in json.dumps(e).lower()]
         out.append(f"   events: {len(evs)}; mentioning 'elite': {len(tte)}")
         if tte:
@@ -67,7 +71,7 @@ for path, params in (("events", {"date": today}), ("events", {"date": yday}), ("
             out.append("   sample TT Elite event: " + scrub(json.dumps(e)[:1500]))
             eid = e.get("id") or e.get("eventId") or e.get("customId")
             if eid:
-                for p2 in (f"events/{eid}", f"event/{eid}", f"events/{eid}/statistics", f"events/{eid}/periods"):
+                for p2 in (f"events/{eid}", f"event/{eid}", f"events/{eid}/details", f"events/{eid}/statistics", f"events/{eid}/periods", f"matches/{eid}", f"match/{eid}"):
                     d2 = get(p2)
                     if d2:
                         out.append("   detail: " + scrub(json.dumps(d2)[:1500]))
@@ -76,5 +80,21 @@ for path, params in (("events", {"date": today}), ("events", {"date": yday}), ("
             out.append("   sample event: " + scrub(json.dumps(evs[0])[:800]))
             comps = sorted({str((e.get('tournament') or e.get('competition') or e.get('league') or {}).get('name') if isinstance(e.get('tournament') or e.get('competition') or e.get('league'), dict) else '') for e in evs})
             out.append(f"   competitions seen: {comps[:30]}")
+# resolve tournament names for the ids seen today
+d = get("fixtures/today")
+items = d.get("items", []) if isinstance(d, dict) else []
+tids = sorted({e.get("tournamentId") for e in items if e.get("tournamentId")})[:40]
+out.append(f"tournament ids today: {tids}")
+for tid in tids[:25]:
+    for path in (f"tournaments/{tid}", f"tournament/{tid}", f"competitions/{tid}", f"unique-tournaments/{tid}"):
+        dd = get(path)
+        if isinstance(dd, dict) and dd.get("http_status_code") not in (404,) and "message" not in dd:
+            nm = dd.get("name") or (dd.get("tournament") or {}).get("name") or (dd.get("uniqueTournament") or {}).get("name") or json.dumps(dd)[:200]
+            out.append(f"   tournament {tid}: {nm}")
+            break
+# per-game scores: take any ended event and dump it fully
+ended = [e for e in items if str(e.get("status", {}).get("type", e.get("status"))).lower() in ("finished", "ended", "ft")] or items[:1]
+if ended:
+    out.append("ENDED/sample event full: " + scrub(json.dumps(ended[0])[:3000]))
 Path("data/raw/probe_sapi.txt").write_text("\n".join(out))
 print("\n".join(out)[:6000])
