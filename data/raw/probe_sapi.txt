@@ -1,0 +1,16 @@
+key set: True len 36
+GET /search {'q': 'TT Elite'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+GET /search {'query': 'TT Elite'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+GET /competitions {} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+GET /unique-tournaments {} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+GET /competitions {'q': 'elite'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+GET /events {'date': '2026-10-12'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+   events: 0; mentioning 'elite': 0
+GET /events {'date': '2026-10-11'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+   events: 0; mentioning 'elite': 0
+GET /fixtures/today {} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+   events: 0; mentioning 'elite': 0
+GET /events {'from': '2026-10-11', 'to': '2026-10-12'} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+   events: 0; mentioning 'elite': 0
+GET /events/date/2026-10-11 {} -> 401 (49 chars)  '{"message":"Unauthorized","http_status_code":401}'
+   events: 0; mentioning 'elite': 0
