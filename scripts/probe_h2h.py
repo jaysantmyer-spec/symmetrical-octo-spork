@@ -31,8 +31,7 @@ if forms:
     data = {}
     for name, body in sels:
         opts = [v for v in re.findall(r"<option[^>]*value=[\"']([^\"']*)", body, re.I) if v.strip()]
-        want = [o for o in opts if "David" in o or "Petas" in o] or opts[1:3]
-        data[name] = want[0] if name == sels[0][0] else (want[1] if len(want) > 1 else want[0])
+        data[name] = "David Petr" if name == sels[0][0] else "Petas Kacper"
     for name, val in re.findall(r"<input[^>]*name=[\"']([^\"']+)[\"'][^>]*value=[\"']([^\"']*)", f, re.I):
         data.setdefault(name, val)
     out.append(f"submit {method.upper()} {action} {data}")
@@ -42,7 +41,12 @@ if forms:
     PT = re.compile(r"\b1[0-9]:[0-9]{1,2}\b|\b[0-9]{1,2}:1[0-9]\b")
     npts = len(PT.findall(txt))
     out.append(f"result: {r2.status_code} {len(r2.text)} chars; point-like scores (e.g. 11:9) found: {npts}")
-    i = txt.find("David") if "David" in txt else 0
-    out.append("text around first hit: " + txt[max(0, i-300): i+1200])
+    # the part of the page after the player list: that's where results would render
+    i = txt.rfind("Show Matches")
+    out.append("text after the form: " + txt[i: i + 4000])
+    tables = re.findall(r"<table[^>]*>.*?</table>", r2.text, re.S | re.I)
+    out.append(f"tables in result: {len(tables)}")
+    for t in tables[:3]:
+        out.append("TABLE: " + re.sub(r"\s+", " ", t[:2500]))
 Path("data/raw/probe_h2h.txt").write_text("\n".join(out))
 print("\n".join(out)[:4000])
