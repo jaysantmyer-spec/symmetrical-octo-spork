@@ -109147,6 +109147,7 @@ sapi34943208,2026-10-13,2026-10-13 02:00:00,TT Elite Series,Jerzy Michalik,Micha
 sapi44905737,2026-10-13,2026-10-13 02:10:00,TT Elite Series,Piotr Gumulinski,Lukasz Oracz,3,1,"[[8, 11], [13, 11], [11, 6], [17, 15]]",4,49,43,2,2,579108-3
 sapi46875743,2026-10-13,2026-10-13 02:10:00,TT Elite Series,Bartosz Kwodawski,Artur Szoltysek,3,0,"[[11, 5], [16, 14], [11, 8]]",3,38,27,1,1,578632-9
 sapi58825038,2026-10-13,2026-10-13 02:10:00,TT Elite Series,Krzysztof Marcinowski,Konrad Staszczyk,0,3,"[[7, 11], [6, 11], [6, 11]]",3,19,33,2,0,578821-9
+sapi76968967,2026-10-13,2026-10-13 02:10:00,TT Elite Series,Jacek Zelezik,Grzegorz Mucha,1,3,"[[5, 11], [13, 15], [11, 9], [6, 11]]",4,35,46,2,1,578634-10
 sapi86165318,2026-10-13,2026-10-13 02:25:00,TT Elite Series,Miroslaw Warzecha,Roman Frank,3,2,"[[10, 12], [11, 5], [11, 8], [9, 11], [11, 6]]",5,52,42,2,1,578606-9
 sapi32966926,2026-10-13,2026-10-13 02:30:00,TT Elite Series,Dominik Bartosik,Miroslaw Lewczuk,1,3,"[[9, 11], [13, 11], [6, 11], [8, 11]]",4,36,44,2,1,578634-11
 sapi65340864,2026-10-13,2026-10-13 02:30:00,TT Elite Series,Grzegorz Marud,Oliver Vincenec,3,2,"[[6, 11], [11, 13], [13, 11], [11, 6], [11, 8]]",5,52,49,2,2,579108-4
@@ -109280,4 +109281,79 @@ sapi20318962,2026-10-13,2026-10-13 12:20:00,TT Elite Series,Michal Jozefiak,Seba
 sapi99476757,2026-10-13,2026-10-13 12:25:00,TT Elite Series,Adrian Wiecek,Kacper Petas,3,1,"[[11, 8], [8, 11], [11, 3], [11, 6]]",4,41,28,1,0,579136-5
 sapi73077853,2026-10-13,2026-10-13 12:30:00,TT Elite Series,Jacek Mitas,Maksymilian Miastowski,1,3,"[[11, 8], [7, 11], [7, 11], [8, 11]]",4,33,41,1,0,579132-5
 sapi71967526,2026-10-13,2026-10-13 12:35:00,TT Elite Series,Piotr Przewlocki,Jakub Pruszkowski,2,3,"[[9, 11], [13, 11], [11, 7], [8, 11], [4, 11]]",5,45,51,2,1,579134-5
+sapi39853025,2026-10-13,2026-10-13 12:35:00,TT Elite Series,Rafal Stapor,Jakub Zochniak,2,3,"[[8, 11], [11, 7], [8, 11], [12, 10], [9, 11]]",5,48,50,2,1,579130-5
 sapi74665311,2026-10-13,2026-10-13 12:40:00,TT Elite Series,Rafal Skotniczny,Krzysztof Schaniel,3,1,"[[7, 11], [11, 7], [11, 5], [11, 4]]",4,40,27,2,0,579110-14
+sapi31286748,2026-10-13,2026-10-13 12:50:00,TT Elite Series,Dimitrij Prokopcov,Jan Zandecki,1,3,"[[11, 8], [5, 11], [7, 11], [6, 11]]",4,29,41,1,0,579136-6
+sapi47672867,2026-10-13,2026-10-13 12:55:00,TT Elite Series,Mateusz Rutkowski,Dawid Kosmal,1,3,"[[6, 11], [8, 11], [13, 11], [8, 11]]",4,35,44,2,1,579132-6
+sapi13948450,2026-10-13,2026-10-13 13:00:00,TT Elite Series,Bartosz Czerwinski,Michal Minda,3,0,"[[11, 9], [11, 4], [11, 9]]",3,33,22,1,0,579130-6
+sapi10720679,2026-10-13,2026-10-13 13:00:00,TT Elite Series,Rafal Niemiec,Witold Buczynski,3,0,"[[11, 6], [11, 9], [11, 8]]",3,33,23,1,0,579134-6
+sapi63479763,2026-10-13,2026-10-13 13:05:00,TT Elite Series,Rafal Gajda,Rafal Dlugaj,3,1,"[[11, 4], [11, 9], [3, 11], [11, 9]]",4,36,33,1,0,579110-15
+sapi69025277,2026-10-13,2026-10-13 13:15:00,TT Elite Series,Petr David,Kacper Petas,3,1,"[[10, 12], [11, 7], [11, 6], [11, 8]]",4,43,33,2,1,579136-7
+sapi11119909,2026-10-13,2026-10-13 13:20:00,TT Elite Series,Miroslav Sklensky,Maksymilian Miastowski,0,3,"[[8, 11], [4, 11], [10, 12]]",3,22,34,2,1,579132-7
+sapi67454749,2026-10-13,2026-10-13 13:25:00,TT Elite Series,Kacper Adamus,Jakub Pruszkowski,3,0,"[[11, 9], [13, 11], [11, 8]]",3,35,28,1,1,579134-7
+sapi10596291,2026-10-13,2026-10-13 13:25:00,TT Elite Series,Artur Sobel,Jakub Zochniak,3,1,"[[11, 9], [11, 9], [8, 11], [11, 7]]",4,41,36,1,0,579130-7
+sapi31126856,2026-10-13,2026-10-13 13:30:00,TT Elite Series,Sebastian Juzek,Krzysztof Schaniel,2,3,"[[16, 14], [12, 10], [6, 11], [7, 11], [8, 11]]",5,49,57,1,2,579112-1
+sapi83521143,2026-10-13,2026-10-13 13:40:00,TT Elite Series,Jiri Vrablik,Dimitrij Prokopcov,2,3,"[[11, 7], [11, 4], [9, 11], [9, 11], [9, 11]]",5,49,44,1,0,579136-8
+sapi39050718,2026-10-13,2026-10-13 13:45:00,TT Elite Series,Daniel Kostal,Mateusz Rutkowski,1,3,"[[11, 6], [8, 11], [7, 11], [8, 11]]",4,34,39,1,0,579132-8
+sapi74320167,2026-10-13,2026-10-13 13:50:00,TT Elite Series,Miroslaw Piecowski,Bartosz Czerwinski,0,3,"[[6, 11], [1, 11], [4, 11]]",3,11,33,2,0,579130-8
+sapi95890861,2026-10-13,2026-10-13 13:50:00,TT Elite Series,Igor Szymanski,Rafal Niemiec,2,3,"[[9, 11], [11, 8], [6, 11], [11, 9], [5, 11]]",5,42,50,2,0,579134-8
+sapi29068826,2026-10-13,2026-10-13 13:55:00,TT Elite Series,Michal Jozefiak,Rafal Dlugaj,0,3,"[[10, 12], [3, 11], [4, 11]]",3,17,34,2,1,579112-2
+sapi32364725,2026-10-13,2026-10-13 14:05:00,TT Elite Series,Adrian Wiecek,Jan Zandecki,3,2,"[[10, 12], [13, 11], [7, 11], [11, 5], [14, 12]]",5,55,51,2,3,579136-9
+sapi63423594,2026-10-13,2026-10-13 14:10:00,TT Elite Series,Jacek Mitas,Dawid Kosmal,3,1,"[[11, 8], [8, 11], [12, 10], [11, 8]]",4,42,37,1,1,579132-9
+sapi22046448,2026-10-13,2026-10-13 14:15:00,TT Elite Series,Piotr Przewlocki,Witold Buczynski,0,3,"[[7, 11], [7, 11], [7, 11]]",3,21,33,2,0,579134-9
+sapi74369960,2026-10-13,2026-10-13 14:15:00,TT Elite Series,Rafal Stapor,Michal Minda,3,2,"[[11, 4], [9, 11], [12, 14], [11, 8], [11, 7]]",5,54,44,1,1,579130-9
+sapi81897998,2026-10-13,2026-10-13 14:20:00,TT Elite Series,Rafal Skotniczny,Rafal Gajda,3,1,"[[11, 6], [10, 12], [11, 4], [11, 8]]",4,43,30,1,1,579112-3
+sapi39982186,2026-10-13,2026-10-13 14:30:00,TT Elite Series,Petr David,Dimitrij Prokopcov,2,3,"[[12, 14], [11, 4], [10, 12], [11, 8], [8, 11]]",5,52,49,2,2,579136-10
+sapi93956561,2026-10-13,2026-10-13 14:35:00,TT Elite Series,Miroslav Sklensky,Mateusz Rutkowski,3,2,"[[11, 8], [6, 11], [9, 11], [11, 7], [11, 6]]",5,48,43,1,0,579132-10
+sapi39556055,2026-10-13,2026-10-13 14:40:00,TT Elite Series,Kacper Adamus,Rafal Niemiec,2,3,"[[8, 11], [5, 11], [11, 5], [11, 7], [8, 11]]",5,43,45,2,0,579134-10
+sapi62459528,2026-10-13,2026-10-13 14:40:00,TT Elite Series,Artur Sobel,Bartosz Czerwinski,0,3,"[[6, 11], [7, 11], [8, 11]]",3,21,33,2,0,579130-10
+sapi40984034,2026-10-13,2026-10-13 14:45:00,TT Elite Series,Sebastian Juzek,Michal Jozefiak,0,3,"[[9, 11], [8, 11], [7, 11]]",3,24,33,2,0,579112-4
+sapi12358357,2026-10-13,2026-10-13 14:55:00,TT Elite Series,Jiri Vrablik,Adrian Wiecek,0,3,"[[11, 13], [9, 11], [10, 12]]",3,30,36,2,2,579136-11
+sapi88376442,2026-10-13,2026-10-13 15:00:00,TT Elite Series,Daniel Kostal,Jacek Mitas,3,1,"[[6, 11], [11, 7], [11, 7], [11, 9]]",4,39,34,2,0,579132-11
+sapi49282843,2026-10-13,2026-10-13 15:05:00,TT Elite Series,Miroslaw Piecowski,Rafal Stapor,3,2,"[[11, 8], [8, 11], [11, 9], [8, 11], [11, 7]]",5,49,46,1,0,579130-11
+sapi91374937,2026-10-13,2026-10-13 15:05:00,TT Elite Series,Igor Szymanski,Piotr Przewlocki,3,2,"[[10, 12], [9, 11], [11, 4], [11, 8], [11, 8]]",5,52,43,2,1,579134-11
+sapi73053109,2026-10-13,2026-10-13 15:10:00,TT Elite Series,Rafal Gajda,Krzysztof Schaniel,1,3,"[[9, 11], [11, 9], [4, 11], [10, 12]]",4,34,43,2,1,579112-5
+sapi51703112,2026-10-13,2026-10-13 15:20:00,TT Elite Series,Jan Zandecki,Kacper Petas,3,0,"[[11, 9], [15, 13], [11, 6]]",3,37,28,1,1,579136-12
+sapi35765934,2026-10-13,2026-10-13 15:25:00,TT Elite Series,Dawid Kosmal,Maksymilian Miastowski,0,3,"[[10, 12], [4, 11], [6, 11]]",3,20,34,2,1,579132-12
+sapi96638326,2026-10-13,2026-10-13 15:30:00,TT Elite Series,Witold Buczynski,Jakub Pruszkowski,0,3,"[[11, 13], [3, 11], [8, 11]]",3,22,35,2,1,579134-12
+sapi86317869,2026-10-13,2026-10-13 15:30:00,TT Elite Series,Michal Minda,Jakub Zochniak,1,3,"[[5, 11], [13, 11], [9, 11], [10, 12]]",4,37,45,2,2,579130-12
+sapi75032170,2026-10-13,2026-10-13 15:30:00,TT Elite Series,Rafal Skotniczny,Rafal Dlugaj,3,2,"[[7, 11], [11, 9], [4, 11], [11, 4], [11, 8]]",5,44,43,2,0,579112-6
+sapi53367185,2026-10-13,2026-10-13 15:45:00,TT Elite Series,Petr David,Adrian Wiecek,3,2,"[[11, 5], [11, 5], [7, 11], [9, 11], [11, 4]]",5,49,36,1,0,579136-13
+sapi66946763,2026-10-13,2026-10-13 15:50:00,TT Elite Series,Miroslav Sklensky,Jacek Mitas,2,3,"[[11, 9], [10, 12], [11, 8], [7, 11], [5, 11]]",5,44,51,1,1,579132-13
+sapi33578441,2026-10-13,2026-10-13 15:55:00,TT Elite Series,Kacper Adamus,Piotr Przewlocki,2,3,"[[13, 11], [11, 6], [1, 11], [6, 11], [7, 11]]",5,38,50,1,1,579134-13
+sapi49885813,2026-10-13,2026-10-13 15:55:00,TT Elite Series,Michal Jozefiak,Krzysztof Schaniel,3,1,"[[11, 6], [13, 11], [8, 11], [13, 11]]",4,45,39,1,2,579112-7
+sapi86352225,2026-10-13,2026-10-13 15:55:00,TT Elite Series,Artur Sobel,Rafal Stapor,0,3,"[[2, 11], [7, 11], [12, 14]]",3,21,36,2,1,579130-13
+sapi35014416,2026-10-13,2026-10-13 16:10:00,TT Elite Series,Dimitrij Prokopcov,Kacper Petas,0,3,"[[5, 11], [2, 11], [6, 11]]",3,13,33,2,0,579136-14
+sapi41745516,2026-10-13,2026-10-13 16:15:00,TT Elite Series,Mateusz Rutkowski,Maksymilian Miastowski,3,1,"[[12, 10], [9, 11], [11, 9], [11, 9]]",4,43,39,1,1,579132-14
+sapi63092696,2026-10-13,2026-10-13 16:20:00,TT Elite Series,Bartosz Czerwinski,Jakub Zochniak,2,3,"[[6, 11], [8, 11], [11, 6], [13, 11], [12, 14]]",5,50,53,2,2,579130-14
+sapi92227295,2026-10-13,2026-10-13 16:20:00,TT Elite Series,Sebastian Juzek,Rafal Skotniczny,3,0,"[[11, 7], [11, 9], [11, 7]]",3,33,23,1,0,579112-8
+sapi21011337,2026-10-13,2026-10-13 16:20:00,TT Elite Series,Rafal Niemiec,Jakub Pruszkowski,1,3,"[[11, 6], [8, 11], [4, 11], [10, 12]]",4,33,40,1,1,579134-14
+sapi85146665,2026-10-13,2026-10-13 16:35:00,TT Elite Series,Daniel Kostal,Dawid Kosmal,3,1,"[[17, 15], [9, 11], [11, 6], [11, 4]]",4,48,36,1,1,579132-15
+sapi16235271,2026-10-13,2026-10-13 16:35:00,TT Elite Series,Jiri Vrablik,Jan Zandecki,1,3,"[[9, 11], [2, 11], [11, 4], [11, 13]]",4,33,39,2,1,579136-15
+sapi56041584,2026-10-13,2026-10-13 16:40:00,TT Elite Series,Miroslaw Piecowski,Michal Minda,1,3,"[[8, 11], [8, 11], [11, 9], [6, 11]]",4,33,42,2,0,579130-15
+sapi26743483,2026-10-13,2026-10-13 16:40:00,TT Elite Series,Igor Szymanski,Witold Buczynski,3,1,"[[5, 11], [11, 3], [12, 10], [11, 4]]",4,39,28,2,1,579134-15
+sapi77429528,2026-10-13,2026-10-13 16:45:00,TT Elite Series,Rafal Gajda,Rafal Dlugaj,2,3,"[[10, 12], [6, 11], [13, 11], [11, 8], [5, 11]]",5,45,53,2,2,579112-9
+sapi61455194,2026-10-13,2026-10-13 17:00:00,TT Elite Series,Szymon Brud,Krzysztof Marcinowski,2,3,"[[11, 13], [11, 7], [14, 12], [4, 11], [7, 11]]",5,47,54,2,2,579143-1
+sapi66617781,2026-10-13,2026-10-13 17:00:00,TT Elite Series,Grzegorz Marud,Jakub Nowak,3,1,"[[9, 11], [11, 8], [11, 5], [11, 8]]",4,42,32,2,0,579140-1
+sapi76393110,2026-10-13,2026-10-13 17:00:00,TT Elite Series,Mateusz Trela,Michal Skorski,3,1,"[[14, 12], [11, 4], [3, 11], [11, 8]]",4,39,35,1,1,
+sapi18315334,2026-10-13,2026-10-13 17:05:00,TT Elite Series,Michal Jozefiak,Rafal Skotniczny,0,3,"[[9, 11], [8, 11], [10, 12]]",3,27,34,2,1,579112-10
+sapi74368830,2026-10-13,2026-10-13 17:10:00,TT Elite Series,Mariusz Adamus,Krzysztof Juszczyk,3,1,"[[11, 7], [9, 11], [11, 7], [11, 8]]",4,42,33,1,0,579118-1
+sapi54451360,2026-10-13,2026-10-13 17:25:00,TT Elite Series,Kamil Durak,Michal Guzik,3,1,"[[11, 7], [6, 11], [11, 8], [11, 7]]",4,39,33,1,0,579140-2
+sapi87325186,2026-10-13,2026-10-13 17:25:00,TT Elite Series,Kuba Golaszewski,Jaroslaw Rolak,3,2,"[[11, 9], [10, 12], [11, 8], [7, 11], [11, 6]]",5,50,46,1,1,
+sapi90962149,2026-10-13,2026-10-13 17:25:00,TT Elite Series,Dawid Kosmal,Lukasz Pietraszko,3,0,"[[11, 2], [11, 8], [13, 11]]",3,35,21,1,1,579143-2
+sapi98679076,2026-10-13,2026-10-13 17:30:00,TT Elite Series,Sebastian Juzek,Rafal Gajda,1,3,"[[8, 11], [11, 7], [3, 11], [8, 11]]",4,30,40,2,0,579112-11
+sapi89332413,2026-10-13,2026-10-13 17:35:00,TT Elite Series,Mariusz Koczyba,Marek Tkocz,3,2,"[[12, 10], [5, 11], [12, 14], [11, 6], [11, 8]]",5,51,49,1,2,579118-2
+sapi88976461,2026-10-13,2026-10-13 17:45:00,TT Elite Series,Konrad Staszczyk,Kamil Rudomina,3,0,"[[11, 2], [11, 5], [11, 8]]",3,33,15,1,0,579143-3
+sapi67588681,2026-10-13,2026-10-13 17:50:00,TT Elite Series,Bartlomiej Mrugala,Dariusz Szlubowski,3,2,"[[11, 8], [7, 11], [5, 11], [11, 7], [11, 9]]",5,45,46,1,0,
+sapi44679346,2026-10-13,2026-10-13 17:50:00,TT Elite Series,Sebastian Szostok,Oliwier Sokolowski,0,3,"[[5, 11], [9, 11], [8, 11]]",3,22,33,2,0,579140-3
+sapi13765609,2026-10-13,2026-10-13 17:55:00,TT Elite Series,Rafal Dlugaj,Krzysztof Schaniel,3,1,"[[11, 5], [11, 4], [13, 15], [12, 10]]",4,47,34,1,2,579112-12
+sapi22881201,2026-10-13,2026-10-13 18:00:00,TT Elite Series,Piotr Kaczynski,Pawel Gasiorski,2,3,"[[8, 11], [12, 10], [11, 5], [7, 11], [13, 15]]",5,51,52,2,2,579118-3
+sapi81706045,2026-10-13,2026-10-13 18:05:00,TT Elite Series,Szymon Brud,Dawid Kosmal,3,2,"[[12, 10], [8, 11], [7, 11], [11, 6], [11, 8]]",5,49,46,1,1,579143-4
+sapi60917751,2026-10-13,2026-10-13 18:15:00,TT Elite Series,Grzegorz Marud,Kamil Durak,1,3,"[[5, 11], [7, 11], [11, 9], [6, 11]]",4,29,42,2,0,579140-4
+sapi65338920,2026-10-13,2026-10-13 18:15:00,TT Elite Series,Mateusz Trela,Kuba Golaszewski,3,0,"[[12, 10], [11, 4], [11, 6]]",3,34,20,1,1,
+sapi84188069,2026-10-13,2026-10-13 18:20:00,TT Elite Series,Michal Jozefiak,Rafal Gajda,3,0,"[[11, 5], [11, 8], [11, 4]]",3,33,17,1,0,579112-13
+sapi92479160,2026-10-13,2026-10-13 18:25:00,TT Elite Series,Mariusz Adamus,Mariusz Koczyba,2,3,"[[11, 3], [5, 11], [5, 11], [11, 8], [9, 11]]",5,41,44,1,0,579118-4
+sapi21611986,2026-10-13,2026-10-13 18:30:00,TT Elite Series,Kamil Rudomina,Krzysztof Marcinowski,3,2,"[[11, 8], [8, 11], [11, 5], [7, 11], [12, 10]]",5,49,45,1,1,579143-5
+sapi42857771,2026-10-13,2026-10-13 18:35:00,TT Elite Series,Oliwier Sokolowski,Jakub Nowak,0,3,"[[10, 12], [11, 13], [7, 11]]",3,28,36,2,2,579140-5
+sapi47084292,2026-10-13,2026-10-13 18:35:00,TT Elite Series,Dariusz Szlubowski,Michal Skorski,3,1,"[[7, 11], [11, 8], [11, 9], [12, 10]]",4,41,38,2,1,
+sapi72275584,2026-10-13,2026-10-13 18:40:00,TT Elite Series,Rafal Skotniczny,Krzysztof Schaniel,1,3,"[[6, 11], [12, 10], [3, 11], [8, 11]]",4,29,43,2,1,579112-14
