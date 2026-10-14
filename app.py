@@ -318,6 +318,7 @@ with tab_price:
             st.code(bm.read_text().strip() if bm.exists() else "(bookmarklet file missing)", language=None)
         txt = st.text_area("Lines", height=120, key="paste_odds")
         if st.button("Use these lines"):
+            (config.DATA / "last_paste.txt").write_text(txt or "")      # kept with the lines, for checking the parser
             o = dk.parse_pasted(txt)
             n_raw = len(o)
             if not o.empty and not D["players"].empty:

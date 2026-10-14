@@ -117,7 +117,7 @@ def push_odds_to_github() -> tuple[bool, str]:
     if not picks._token():
         return False, "no GitHub token (lines kept on this server only)"
     ok_all, msgs = True, []
-    for path in (config.ODDS_CSV, config.ODDS_HISTORY_CSV):
+    for path in (config.ODDS_CSV, config.ODDS_HISTORY_CSV, config.DATA / "last_paste.txt"):
         if not path.exists():
             continue
         rel = f"data/{path.name}"
