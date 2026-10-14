@@ -50,6 +50,7 @@ def make_st():
     st.checkbox = lambda label, value=False, **k: value
     st.text_input = lambda label, value="", **k: value
     st.json = lambda *a, **k: None
+    st.code = lambda *a, **k: None
     st.toast = lambda *a, **k: None
     st.multiselect = lambda label, options=(), **k: []
     st.rerun = lambda: None
