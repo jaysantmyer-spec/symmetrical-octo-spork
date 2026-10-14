@@ -5,8 +5,13 @@ connections) and push them to the repo as data/odds.csv, where the app and the r
     export GITHUB_TOKEN=github_pat_...       # fine-grained token, Contents: read/write on this repo
     python scripts/push_lines.py             # once
     python scripts/push_lines.py --loop 10   # every 10 minutes until you stop it (Ctrl-C)
+    python scripts/push_lines.py --file ~/Downloads/dk.json   # lines from a JSON you saved in Safari (see below)
 
-Needs: pip install requests pandas
+Needs: pip install requests pandas curl_cffi      (curl_cffi makes the request look like Chrome; DraftKings 403s without it)
+
+Manual route if DraftKings still refuses: open this in Safari, which always passes --
+    https://sportsbook.draftkings.com/sites/US-SB/api/v5/eventgroups/208037?format=json
+then File > Save As..., format "Page Source", name dk.json, and run with --file.
 """
 from __future__ import annotations
 
@@ -49,8 +54,20 @@ def push_file(path: str, content: str, message: str) -> None:
     r.raise_for_status()
 
 
-def once() -> int:
-    df = dk.fetch_dk(save_raw=False)
+def from_file(path: str) -> pd.DataFrame:
+    import json
+    payload = json.loads(Path(path).read_text())
+    rows = dk._parse_v5(payload) if "eventGroup" in payload or "offerCategories" in payload else dk._parse_nash(payload)
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df["odds_1"] = pd.to_numeric(df["odds_1"], errors="coerce"); df["odds_2"] = pd.to_numeric(df["odds_2"], errors="coerce")
+    df = df.dropna(subset=["odds_1", "odds_2"]); df["bookmaker"] = "DraftKings"; df["fetched_at"] = pd.Timestamp.now(tz="UTC").tz_localize(None)
+    return df.drop_duplicates(["player_1", "player_2", "commence_time"])
+
+
+def once(file: str | None = None) -> int:
+    df = from_file(file) if file else dk.fetch_dk(save_raw=False)
     if df.empty:
         print("DraftKings returned no TT Elite lines:\n  " + "\n  ".join(dk.LAST_FETCH_LOG))
         return 0
@@ -75,10 +92,11 @@ def once() -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--loop", type=int, default=0, help="repeat every N minutes")
+    ap.add_argument("--file", default=None, help="parse a DraftKings JSON saved from the browser instead of fetching")
     a = ap.parse_args()
     while True:
         try:
-            once()
+            once(a.file)
         except Exception as ex:
             print("failed:", ex)
         if not a.loop:

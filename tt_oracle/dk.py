@@ -82,10 +82,32 @@ LAST_FETCH_LOG: list[str] = []
 
 
 # --------------------------------------------------------------------------- fetching
+BROWSER_HEADERS = {**HEADERS, "Referer": "https://sportsbook.draftkings.com/leagues/tabletennis/tt-elite-series",
+                   "Origin": "https://sportsbook.draftkings.com", "Accept": "application/json, text/plain, */*",
+                   "sec-ch-ua": '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="99"', "sec-ch-ua-mobile": "?0",
+                   "sec-ch-ua-platform": '"macOS"', "Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "same-site"}
+_session = None
+
+
 def _get_json(url: str, timeout: int = 20):
-    r = requests.get(url, headers=HEADERS, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
+    """DraftKings sits behind a bot wall that fingerprints the TLS handshake. curl_cffi impersonating Chrome
+    passes it from a home connection; plain requests gets 403. Falls back to requests when curl_cffi is absent."""
+    global _session
+    try:
+        from curl_cffi import requests as cr
+        if _session is None:
+            _session = cr.Session(impersonate="chrome")
+            try:                                            # a page visit first, to pick up the site's cookies
+                _session.get("https://sportsbook.draftkings.com/leagues/tabletennis/tt-elite-series", headers=HEADERS, timeout=timeout)
+            except Exception:
+                pass
+        r = _session.get(url, headers=BROWSER_HEADERS, timeout=timeout)
+        r.raise_for_status()
+        return r.json()
+    except ImportError:
+        r = requests.get(url, headers=BROWSER_HEADERS, timeout=timeout)
+        r.raise_for_status()
+        return r.json()
 
 
 def _parse_v5(payload: dict) -> list[dict]:
