@@ -306,11 +306,11 @@ with tab_price:
                 st.code("\n".join(dk.LAST_FETCH_LOG) or "(no log)")
     cfb.caption("Tries DraftKings' public odds feed for league 208037 (TT Elite Series) from the app's own server.")
     with st.expander("Paste DraftKings lines (if the automatic feed has nothing)"):
-        st.caption("One match per line: `Oskar Jadach -150 / Wojciech Urban +120`. Names can be last name + initial. "
-                   "Fastest way to fill this: open DraftKings' TT Elite page in your browser and click the **Copy DK lines** bookmark "
-                   "(setup in DEPLOY.md) — it copies every line on the page in this format; paste here and press the button. "
-                   "With a GitHub token in Secrets the lines are stored in the repo, so they count toward the model × market blend.")
-        with st.expander("Set up the 'Copy DK lines' bookmark (one time)"):
+        st.markdown("**Easiest:** open DraftKings' TT Elite Series page (moneyline view), press **⌘A** then **⌘C** to copy the whole page, "
+                    "paste it in the box below and press the button — the names and prices are picked out automatically. "
+                    "You can also type lines by hand, one match per line: `Oskar Jadach -150 / Wojciech Urban +120`.")
+        st.caption("With a GitHub token in the app's Secrets the lines are stored in the repo, so they also feed the model × market blend.")
+        with st.expander("Optional: a 'Copy DK lines' bookmark that copies just the lines"):
             st.markdown("1. In Safari (or Chrome), bookmark any page and name it **Copy DK lines**.\n"
                         "2. Edit that bookmark and replace its address with the whole text below (hover the box, click the copy icon).\n"
                         "3. Open DraftKings' TT Elite Series page, click the bookmark: it copies every match's moneyline. Paste below, press the button.")

@@ -206,8 +206,38 @@ def snapshot_odds(df: pd.DataFrame | None = None) -> dict:
     return {"lines": int(len(df))}
 
 
+ODDS_RX = re.compile(r"^[+\u2212-]\d{3,4}$")
+NAME_RX = re.compile(r"^[A-Za-z\u00C0-\u017F][A-Za-z\u00C0-\u017F'.\- ]+$")
+NOISE = {"moneyline", "spread", "total", "total games", "match lines", "odds", "more wagers", "live", "today", "tomorrow",
+         "tt elite series", "table tennis", "game lines", "all", "featured", "same game parlay", "popular", "starting soon"}
+
+
+def parse_page_text(text: str) -> pd.DataFrame:
+    """Lines from a DraftKings page copied whole (select all, copy): a participant name followed by its American
+    odds, two participants per match. Anything that isn't a name or a price (times, column headers, 'O 73.5') is
+    skipped. Works on the moneyline view of the TT Elite Series page."""
+    toks = [t.strip() for t in re.split(r"[\r\n\t]+", text or "") if t.strip()]
+    parts, pending = [], None
+    for t in toks:
+        tl = t.lower()
+        if ODDS_RX.match(t):
+            if pending:
+                parts.append((pending, t.replace("\u2212", "-"))); pending = None
+            continue
+        if NAME_RX.match(t) and 2 <= len(t.split()) <= 4 and tl not in NOISE and not re.search(r"\b(am|pm)\b", tl):
+            pending = t
+    rows, now = [], pd.Timestamp.now(tz="UTC").tz_localize(None)
+    for i in range(0, len(parts) - 1, 2):
+        (n1, o1), (n2, o2) = parts[i], parts[i + 1]
+        rows.append({"event_id": None, "commence_time": None, "player_1": n1, "odds_1": american_to_decimal(o1),
+                     "player_2": n2, "odds_2": american_to_decimal(o2), "league": "TT Elite Series (pasted page)",
+                     "bookmaker": "DraftKings", "fetched_at": now})
+    return pd.DataFrame(rows)
+
+
 def parse_pasted(text: str) -> pd.DataFrame:
-    """'Oskar Jadach -150 / Wojciech Urban +120' per line (also accepts 'vs' and decimal odds)."""
+    """'Oskar Jadach -150 / Wojciech Urban +120' per line (also accepts 'vs' and decimal odds). If no line matches
+    that shape, the text is treated as a whole copied DraftKings page (see parse_page_text)."""
     rows = []
     for line in (text or "").splitlines():
         parts = re.split(r"\s*(?:/|vs\.?|,)\s*", line.strip(), maxsplit=1)
@@ -222,7 +252,9 @@ def parse_pasted(text: str) -> pd.DataFrame:
             return v if 1.01 <= v <= 20 and "+" not in s and "-" not in s else american_to_decimal(s)
         rows.append({"event_id": None, "commence_time": None, "player_1": m1.group(1).strip(), "odds_1": dec(m1.group(2)),
                      "player_2": m2.group(1).strip(), "odds_2": dec(m2.group(2)), "league": "TT Elite Series (pasted)",
-                     "bookmaker": "DraftKings", "fetched_at": pd.Timestamp.utcnow()})
+                     "bookmaker": "DraftKings", "fetched_at": pd.Timestamp.now(tz="UTC").tz_localize(None)})
+    if not rows:
+        return parse_page_text(text)
     return pd.DataFrame(rows)
 
 
