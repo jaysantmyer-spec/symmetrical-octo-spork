@@ -212,13 +212,66 @@ NOISE = {"moneyline", "spread", "total", "total games", "match lines", "odds", "
          "tt elite series", "table tennis", "game lines", "all", "featured", "same game parlay", "popular", "starting soon"}
 
 
+TIME_RX = re.compile(r"^(Today|Tomorrow|[A-Z][a-z]{2} \d{1,2})\s+(\d{1,2}:\d{2})\s*(AM|PM)$", re.I)
+
+
+def _parse_dk_time(tok: str, now_local: pd.Timestamp):
+    """'Today 11:45 AM' / 'Tomorrow 2:05 PM' / 'Oct 15 9:10 AM' in the viewer's (US Eastern) clock -> UTC naive."""
+    m = TIME_RX.match(tok.strip())
+    if not m:
+        return pd.NaT
+    day, hm, ap = m.group(1).lower(), m.group(2), m.group(3).upper()
+    if day == "today":
+        d = now_local.normalize()
+    elif day == "tomorrow":
+        d = now_local.normalize() + pd.Timedelta(days=1)
+    else:
+        d = pd.to_datetime(f"{m.group(1)} {now_local.year}", errors="coerce")
+        if pd.isna(d):
+            return pd.NaT
+        d = d.tz_localize(now_local.tz) if d.tzinfo is None else d
+    t = pd.to_datetime(f"{hm} {ap}", format="%I:%M %p")
+    local = d + pd.Timedelta(hours=t.hour, minutes=t.minute)
+    return local.tz_convert("Europe/Warsaw").tz_localize(None)       # matches.csv uses the site's (Polish) clock
+
+
 def parse_page_text(text: str) -> pd.DataFrame:
-    """Lines from a DraftKings page copied whole (select all, copy). Each participant's name is followed by the
-    prices in that row (spread price, total price, moneyline - in whatever order the page shows them); two
-    participants per match. The moneyline pair is identified by its vig: the two prices of one match imply
-    probabilities summing to ~1.02-1.12, which no mix of spread/total prices across two rows reliably does."""
-    toks = [t.strip() for t in re.split(r"[\r\n\t]+", text or "") if t.strip()]
-    entries = []                                              # [name, [odds...]]
+    """A DraftKings league page copied whole (select all, copy). The match list reads
+        Name A / VS / Name B / <price A> / <price B> / Today 11:45 AM / More Bets
+    so each 'VS' token anchors one match: the names around it, then the next two American prices, then the
+    start time if one follows. Lines whose two prices don't add up to a plausible vig are skipped."""
+    toks = [t.strip() for t in re.split(r"[\r\n]+", text or "") if t.strip()]
+    now_local = pd.Timestamp.now(tz="America/New_York")
+    rows, now = [], pd.Timestamp.now(tz="UTC").tz_localize(None)
+    for i, t in enumerate(toks):
+        if t.upper() != "VS" or i == 0 or i + 1 >= len(toks):
+            continue
+        n1, n2 = toks[i - 1], toks[i + 1]
+        if not (NAME_RX.match(n1) and NAME_RX.match(n2)):
+            continue
+        odds, when, j = [], pd.NaT, i + 2
+        while j < len(toks) and j < i + 12 and toks[j].upper() != "VS":
+            tj = toks[j]
+            if ODDS_RX.match(tj) and len(odds) < 2:
+                odds.append(tj.replace("\u2212", "-"))
+            elif TIME_RX.match(tj):
+                when = _parse_dk_time(tj, now_local); break
+            j += 1
+        if len(odds) < 2:
+            continue
+        o1, o2 = american_to_decimal(odds[0]), american_to_decimal(odds[1])
+        if not (1.00 <= 1 / o1 + 1 / o2 <= 1.15):
+            continue
+        rows.append({"event_id": None, "commence_time": when, "player_1": n1, "odds_1": o1, "player_2": n2, "odds_2": o2,
+                     "league": "TT Elite Series (pasted page)", "bookmaker": "DraftKings", "fetched_at": now})
+    if rows:
+        return pd.DataFrame(rows)
+    return _parse_page_rows(toks)
+
+
+def _parse_page_rows(toks: list) -> pd.DataFrame:
+    """Fallback for table layouts: a name followed by its row's prices; moneyline is the same column in both rows."""
+    entries = []
     for t in toks:
         tl = t.lower()
         if ODDS_RX.match(t):
@@ -228,29 +281,17 @@ def parse_page_text(text: str) -> pd.DataFrame:
         if NAME_RX.match(t) and 2 <= len(t.split()) <= 4 and tl not in NOISE and not re.search(r"\b(am|pm)\b", tl):
             entries.append([t, []])
     entries = [e for e in entries if e[1]]
-
-    def implied(a):
-        return 1.0 / american_to_decimal(a)
-
+    implied = lambda a: 1.0 / american_to_decimal(a)
     rows, now, i = [], pd.Timestamp.now(tz="UTC").tz_localize(None), 0
     while i + 1 < len(entries):
         (n1, o1s), (n2, o2s) = entries[i], entries[i + 1]
         best = None
-        # same column in both rows, trying the last column first (DraftKings puts the moneyline last)
         for k in range(1, min(len(o1s), len(o2s)) + 1):
             a, b = o1s[-k], o2s[-k]
             if 1.00 <= implied(a) + implied(b) <= 1.15:
                 best = (a, b); break
-        if best is None:                                      # columns misaligned: any pair with a sane vig
-            best_d = 1e9
-            for a in o1s:
-                for b in o2s:
-                    tot = implied(a) + implied(b)
-                    if 1.00 <= tot <= 1.15 and abs(tot - 1.05) < best_d:
-                        best, best_d = (a, b), abs(tot - 1.05)
-        if best is None:                                      # these two rows aren't a match: slide one row
-            i += 1
-            continue
+        if best is None:
+            i += 1; continue
         rows.append({"event_id": None, "commence_time": None, "player_1": n1, "odds_1": american_to_decimal(best[0]),
                      "player_2": n2, "odds_2": american_to_decimal(best[1]), "league": "TT Elite Series (pasted page)",
                      "bookmaker": "DraftKings", "fetched_at": now})
@@ -289,17 +330,27 @@ def attach_market(P: pd.DataFrame, odds: pd.DataFrame | None = None) -> pd.DataF
     out["dk_odds_a"], out["dk_odds_b"], out["market_p_a"] = np.nan, np.nan, np.nan
     if odds is None or odds.empty or out.empty:
         return out
-    idx = {}
+    cands = []
     for _, r in odds.iterrows():
-        idx[(_key_set(r["player_1"]), _key_set(r["player_2"]))] = (float(r["odds_1"]), float(r["odds_2"]))
+        ct = pd.to_datetime(r.get("commence_time"), errors="coerce") if "commence_time" in odds else pd.NaT
+        cands.append((_key_set(r["player_1"]), _key_set(r["player_2"]), float(r["odds_1"]), float(r["odds_2"]), ct))
     for i, r in out.iterrows():
         ka, kb = _key_set(r["player_a"]), _key_set(r["player_b"])
-        hit = None
-        for (k1, k2), (o1, o2) in idx.items():
+        st_ = pd.to_datetime(r["start_time"])
+        hit, best_dt = None, None
+        for k1, k2, o1, o2, ct in cands:
             if _same(ka, k1) and _same(kb, k2):
-                hit = (o1, o2); break
-            if _same(ka, k2) and _same(kb, k1):
-                hit = (o2, o1); break
+                pair = (o1, o2)
+            elif _same(ka, k2) and _same(kb, k1):
+                pair = (o2, o1)
+            else:
+                continue
+            # a line with a start time must be the same meeting (same pairs play several times a day)
+            dt = abs((ct - st_).total_seconds()) if pd.notna(ct) else 0.0
+            if pd.notna(ct) and dt > 2 * 3600:
+                continue
+            if best_dt is None or dt < best_dt:
+                hit, best_dt = pair, dt
         if hit:
             oa, ob = hit
             ia, ib = 1 / oa, 1 / ob
