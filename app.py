@@ -165,19 +165,28 @@ with tab_today:
         P = pred.copy()
         P["start_time"] = pd.to_datetime(P["start_time"])
         P = P.sort_values("start_time")
+        # ---- which picks to show: everything, or only picks at or above a probability you choose
+        ok = ~P["thin_history"].astype(bool)
+        t1, t2 = st.columns([1, 3])
+        mode = t1.radio("Show", ["All picks", "Minimum %"], index=1, horizontal=True, key="today_mode",
+                        help="'All picks' lists every upcoming match. 'Minimum %' keeps only picks the model rates at or above the slider.")
+        min_p = t2.slider("Minimum model probability for the pick", 50, 95, 75, 5, format="%d%%", key="today_min_pct",
+                          disabled=(mode == "All picks")) / 100.0 if mode == "Minimum %" else 0.0
+        label = f"{min_p:.0%}+ picks" if min_p else "All picks"
         c1, c2, c3 = st.columns(3)
         c1.metric("Upcoming matches", len(P))
-        ok = ~P["thin_history"].astype(bool)
-        c2.metric("75%+ picks", int(((P["pick_prob"] >= 0.75) & ok).sum()), f"{int(((P['pick_prob'] >= 0.85) & ok).sum())} at 85%+")
+        sel_all = P[(P["pick_prob"] >= min_p) & ok] if min_p else P
+        c2.metric(label, len(sel_all), f"{int(((P['pick_prob'] >= min(0.95, min_p + 0.10)) & ok).sum())} at {min(0.95, min_p + 0.10):.0%}+" if min_p else None)
         c3.metric("With DraftKings line", int(P["market_p_a"].notna().sum()) if "market_p_a" in P else 0)
 
-        # ---- where the picks are: every 75%+ pick across all upcoming days, grouped by day and session
-        picks75 = P[(P["pick_prob"] >= 0.75) & ok].copy()
+        # ---- where the picks are: every selected pick across all upcoming days, grouped by day and session
+        picks75 = sel_all.copy() if min_p else P[(P["pick_prob"] >= 0.75) & ok].copy()
         if not picks75.empty:
+            hi_t = min(0.95, (min_p or 0.75) + 0.10)
             picks75["day"] = picks75["start_time"].dt.date
-            by_day = picks75.groupby("day").agg(picks=("match_id", "size"), at85=("pick_prob", lambda v: int((v >= 0.85).sum())))
-            summary = " · ".join(f"{pd.Timestamp(d):%a %d %b}: {int(r['picks'])} ({int(r['at85'])} at 85%+)" for d, r in by_day.iterrows())
-            with st.expander(f"Where the {len(picks75)} picks are — {summary}", expanded=False):
+            by_day = picks75.groupby("day").agg(picks=("match_id", "size"), at85=("pick_prob", lambda v: int((v >= hi_t).sum())))
+            summary = " · ".join(f"{pd.Timestamp(d):%a %d %b}: {int(r['picks'])} ({int(r['at85'])} at {hi_t:.0%}+)" for d, r in by_day.iterrows())
+            with st.expander(f"Where the {len(picks75)} {label.lower() if min_p else '75%+ picks'} are — {summary}", expanded=False):
                 tbl = picks75.sort_values("start_time")[["start_time", "session", "player_a", "player_b", "pick", "pick_prob", "confidence"]].copy()
                 tbl["when"] = tbl["start_time"].dt.strftime("%a %d %b %H:%M")
                 tbl["match"] = tbl["player_a"].astype(str) + " vs " + tbl["player_b"].astype(str)
@@ -230,12 +239,10 @@ with tab_today:
                 st.dataframe(od[["when", "line"]].sort_values("when"), hide_index=True, height=min(400, 40 + 35 * len(od)))
         if not odds.empty:
             P = dk.attach_market(P, odds)      # re-match with whatever lines are loaded right now
-        cd1, cd2, cd3 = st.columns([1, 2, 1])
+        cd1, cd3 = st.columns([1, 1])
         days = sorted(P["start_time"].dt.date.unique())
         day = cd1.selectbox("Day", ["All days"] + days, index=1 if days else 0)
         only_dk = cd3.checkbox("Only matches on DraftKings", value=False, help="Show just the matches that have a line loaded")
-        min_p = cd2.radio("Minimum model probability", [0.0, 0.75, 0.85], index=1, horizontal=True,
-                          format_func=lambda v: {0.0: "All matches", 0.75: "75%+ picks", 0.85: "85%+ picks"}[v])
         q = st.text_input("Search a player or match", placeholder="e.g. Jadach, or Jadach Urban", key="today_q")
         view = P if day == "All days" else P[P["start_time"].dt.date == day]
         if only_dk:
@@ -255,7 +262,7 @@ with tab_today:
                 view = view[both.apply(lambda s: all(w in s for w in words))]
                 if not view.empty:
                     st.caption("No match at the chosen probability filter; showing all matches for that search.")
-        st.caption(f"{len(view)} matches shown" + (f" at {min_p:.0%}+ (players with thin history excluded)" if min_p and not q.strip() else ""))
+        st.caption(f"{len(view)} matches shown" + (f" — picks at {min_p:.0%}+ (players with thin history excluded)" if min_p and not q.strip() else " — all picks"))
         for d, vd in view.groupby(view["start_time"].dt.date, sort=True):
             if day == "All days":
                 st.markdown(f"### {pd.Timestamp(d):%A %d %B} · {len(vd)} matches")
@@ -278,8 +285,10 @@ with tab_price:
     kf = c2.select_slider("Kelly fraction", options=[0.1, 0.25, 0.5], value=0.25,
                           format_func=lambda v: {0.1: "1/10", 0.25: "Quarter", 0.5: "Half"}[v])
     thr = c3.slider("Edge threshold", 0.0, 0.15, 0.05, 0.01, format="%.2f")
-    min_pp = st.radio("Only price picks at", [0.0, 0.75, 0.85], index=1, horizontal=True, key="price_min",
-                      format_func=lambda v: {0.0: "any probability", 0.75: "75%+", 0.85: "85%+"}[v])
+    pm1, pm2 = st.columns([1, 3])
+    pmode = pm1.radio("Price", ["All picks", "Minimum %"], index=1, horizontal=True, key="price_mode")
+    min_pp = pm2.slider("Only price picks at or above", 50, 95, 75, 5, format="%d%%", key="price_min_pct",
+                        disabled=(pmode == "All picks")) / 100.0 if pmode == "Minimum %" else 0.0
     cfa, cfb = st.columns([1, 3])
     if cfa.button("Fetch DraftKings lines now"):
         with st.spinner("Asking DraftKings…"):
