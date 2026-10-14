@@ -319,9 +319,19 @@ with tab_price:
         txt = st.text_area("Lines", height=120, key="paste_odds")
         if st.button("Use these lines"):
             o = dk.parse_pasted(txt)
+            n_raw = len(o)
+            if not o.empty and not D["players"].empty:
+                # keep only pairs where both names are known TT Elite players (guards against copying the wrong page)
+                known = [dk._key_set(n) for n in D["players"]["player"].tolist()]
+                def _known(name):
+                    k = dk._key_set(name); return any(dk._same(k, x) for x in known)
+                o = o[o["player_1"].map(_known) & o["player_2"].map(_known)]
             if o.empty:
-                st.error("Couldn't read any lines.")
+                st.error("Couldn't read any TT Elite lines." + (f" {n_raw} pairs were found but none are TT Elite players — "
+                         "was that DraftKings' TT Elite Series page? (Table Tennis → TT Elite Series, moneyline view.)" if n_raw else ""))
             else:
+                if n_raw > len(o):
+                    st.caption(f"{n_raw - len(o)} pairs ignored (not TT Elite players).")
                 dk.snapshot_odds(o)
                 from tt_oracle.market import push_odds_to_github
                 okp, msgp = push_odds_to_github()
