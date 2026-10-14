@@ -155,7 +155,7 @@ with st.sidebar:
     if config.STATE_FILE.exists():
         st.caption(f"Learners: {', '.join(state.get('learners') or [])}")
     if not odds.empty:
-        st.caption(f"DraftKings lines: {len(odds)} ({pd.to_datetime(odds['fetched_at']).max():%d %b %H:%M} UTC)")
+        st.caption(f"DraftKings lines: {len(odds)} (updated {pd.to_datetime(odds['fetched_at']).max().tz_localize('UTC').tz_convert(HOME_TZ):%d %b %I:%M %p} ET)")
     st.divider()
     st.caption("Data refreshes every 6 hours via GitHub Actions. Predictions are logged before each match and graded after.")
 
@@ -253,7 +253,7 @@ with tab_today:
                 od = odds.copy()
                 od["when"] = pd.to_datetime(od["commence_time"], errors="coerce")
                 od["line"] = od.apply(lambda r: f"{r['player_1']} {dk.decimal_to_american(r['odds_1'])} / {r['player_2']} {dk.decimal_to_american(r['odds_2'])}", axis=1)
-                st.caption(f"{len(od)} lines on file from {od['bookmaker'].iloc[0]} ({pd.to_datetime(od['fetched_at']).max():%d %b %H:%M} UTC)")
+                st.caption(f"{len(od)} lines on file from {od['bookmaker'].iloc[0]} (updated {pd.to_datetime(od['fetched_at']).max().tz_localize('UTC').tz_convert(HOME_TZ):%d %b %I:%M %p} ET)")
                 st.dataframe(od[["when", "line"]].sort_values("when"), hide_index=True, height=min(400, 40 + 35 * len(od)))
         if not odds.empty:
             P = dk.attach_market(P, odds)      # re-match with whatever lines are loaded right now
