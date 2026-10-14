@@ -378,10 +378,11 @@ with tab_h2h:
         sess = st.radio("Session", config.SESSIONS, horizontal=True, index=1, key="h2h_sess")
         if a != b:
             @st.cache_resource(show_spinner=False)
-            def _model():
+            def _model(model_sig):
+                """Cached per model file version, so a retrain by the refresh workflow is picked up without a reboot."""
                 from tt_oracle.model import Predictor
                 return Predictor.load()
-            mdl = _model()
+            mdl = _model(config.MODEL_FILE.stat().st_mtime if config.MODEL_FILE.exists() else 0)
             if mdl is None:
                 st.caption("Model file not available on this server yet.")
             else:
@@ -393,6 +394,23 @@ with tab_h2h:
                 pr["session"], pr["venue"], pr["start_time"] = sess, "any venue", pd.Timestamp.now()
                 st.markdown(card_html(pr), unsafe_allow_html=True)
                 save_button(pr, "h2h", f"save_h2h_{a}_{b}_{sess}")
+                # the same breakdown the Today cards carry, spelled out
+                if pd.notna(pr.get("p_g3")):
+                    g1, g2, g3 = st.columns(3)
+                    g1.metric("3 games", f"{float(pr['p_g3']):.0%}", f"over 3.5: {float(pr['over35']):.0%}")
+                    g2.metric("4 games", f"{float(pr['p_g4']):.0%}")
+                    g3.metric("5 games", f"{float(pr['p_g5']):.0%}", f"over 4.5: {float(pr['over45']):.0%}")
+                    q = float(pr["p_a"]); G = [float(pr["p_g3"]), float(pr["p_g4"]), float(pr["p_g5"])]
+                    s3 = q ** 3 / (q ** 3 + (1 - q) ** 3); s4 = q ** 3 * (1 - q) / (q ** 3 * (1 - q) + (1 - q) ** 3 * q)
+                    s5 = q ** 3 * (1 - q) ** 2 / (q ** 3 * (1 - q) ** 2 + (1 - q) ** 3 * q ** 2)
+                    scores = {"3-0": G[0] * s3, "0-3": G[0] * (1 - s3), "3-1": G[1] * s4, "1-3": G[1] * (1 - s4), "3-2": G[2] * s5, "2-3": G[2] * (1 - s5)}
+                    sc = pd.DataFrame({"score (A-B)": list(scores), "probability": list(scores.values())}).sort_values("probability", ascending=False)
+                    st.dataframe(sc.style.format({"probability": "{:.0%}"}), hide_index=True, height=250)
+                if pd.notna(pr.get("exp_total_points")):
+                    t1, t2, t3 = st.columns(3)
+                    t1.metric("Model total points", f"{float(pr['exp_total_points']):.0f}")
+                    t2.metric(f"{a} wins if takes game 1", f"{float(pr['p_a_if_g1']):.0%}")
+                    t3.metric(f"{b} wins if takes game 1", f"{1 - float(pr['p_a_if_lost_g1']):.0%}")
                 st.caption("Model prediction for this matchup if it were played in the chosen session today, both players "
                            "fresh. Fatigue and same-day load are set to zero; the live Today tab uses the real schedule.")
         c1, c2, c3 = st.columns(3)
