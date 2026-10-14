@@ -213,25 +213,48 @@ NOISE = {"moneyline", "spread", "total", "total games", "match lines", "odds", "
 
 
 def parse_page_text(text: str) -> pd.DataFrame:
-    """Lines from a DraftKings page copied whole (select all, copy): a participant name followed by its American
-    odds, two participants per match. Anything that isn't a name or a price (times, column headers, 'O 73.5') is
-    skipped. Works on the moneyline view of the TT Elite Series page."""
+    """Lines from a DraftKings page copied whole (select all, copy). Each participant's name is followed by the
+    prices in that row (spread price, total price, moneyline - in whatever order the page shows them); two
+    participants per match. The moneyline pair is identified by its vig: the two prices of one match imply
+    probabilities summing to ~1.02-1.12, which no mix of spread/total prices across two rows reliably does."""
     toks = [t.strip() for t in re.split(r"[\r\n\t]+", text or "") if t.strip()]
-    parts, pending = [], None
+    entries = []                                              # [name, [odds...]]
     for t in toks:
         tl = t.lower()
         if ODDS_RX.match(t):
-            if pending:
-                parts.append((pending, t.replace("\u2212", "-"))); pending = None
+            if entries:
+                entries[-1][1].append(t.replace("\u2212", "-"))
             continue
         if NAME_RX.match(t) and 2 <= len(t.split()) <= 4 and tl not in NOISE and not re.search(r"\b(am|pm)\b", tl):
-            pending = t
-    rows, now = [], pd.Timestamp.now(tz="UTC").tz_localize(None)
-    for i in range(0, len(parts) - 1, 2):
-        (n1, o1), (n2, o2) = parts[i], parts[i + 1]
-        rows.append({"event_id": None, "commence_time": None, "player_1": n1, "odds_1": american_to_decimal(o1),
-                     "player_2": n2, "odds_2": american_to_decimal(o2), "league": "TT Elite Series (pasted page)",
+            entries.append([t, []])
+    entries = [e for e in entries if e[1]]
+
+    def implied(a):
+        return 1.0 / american_to_decimal(a)
+
+    rows, now, i = [], pd.Timestamp.now(tz="UTC").tz_localize(None), 0
+    while i + 1 < len(entries):
+        (n1, o1s), (n2, o2s) = entries[i], entries[i + 1]
+        best = None
+        # same column in both rows, trying the last column first (DraftKings puts the moneyline last)
+        for k in range(1, min(len(o1s), len(o2s)) + 1):
+            a, b = o1s[-k], o2s[-k]
+            if 1.00 <= implied(a) + implied(b) <= 1.15:
+                best = (a, b); break
+        if best is None:                                      # columns misaligned: any pair with a sane vig
+            best_d = 1e9
+            for a in o1s:
+                for b in o2s:
+                    tot = implied(a) + implied(b)
+                    if 1.00 <= tot <= 1.15 and abs(tot - 1.05) < best_d:
+                        best, best_d = (a, b), abs(tot - 1.05)
+        if best is None:                                      # these two rows aren't a match: slide one row
+            i += 1
+            continue
+        rows.append({"event_id": None, "commence_time": None, "player_1": n1, "odds_1": american_to_decimal(best[0]),
+                     "player_2": n2, "odds_2": american_to_decimal(best[1]), "league": "TT Elite Series (pasted page)",
                      "bookmaker": "DraftKings", "fetched_at": now})
+        i += 2
     return pd.DataFrame(rows)
 
 
