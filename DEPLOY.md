@@ -84,3 +84,14 @@ Lines pushed by `scripts/push_lines.py` accumulate in `data/odds_history.csv`; e
 line per match (`data/closing_lines.csv`) and, once 300 graded predictions have one, fits a model × market
 blend (`models/market_blend.json`) shown on the cards as "Model × market blend". The ledger keeps grading the
 pure model so the two stay comparable.
+
+## DraftKings lines without a terminal: the "Copy DK lines" bookmark
+
+DraftKings' odds API refuses everything but its own web page (even Safari typing the API address gets "Access
+Denied"), so the lines are read from the page you can see. `scripts/copy_dk_lines.js` is a bookmarklet
+(one-line form in `scripts/bookmarklet.txt`, also shown in the app under Pricing desk → paste box): open the TT
+Elite Series page on sportsbook.draftkings.com, click the bookmark, every moneyline is copied as
+`Player A -150 / Player B +120` lines; paste into the app and press "Use these lines". With `GITHUB_TOKEN` in the
+app's Secrets the lines are committed to the repo (odds.csv + odds_history.csv), where the refresh turns them into
+closing lines for the model × market blend. Regenerate the one-liner after editing the .js with
+`python scripts/make_bookmarklet.py`.

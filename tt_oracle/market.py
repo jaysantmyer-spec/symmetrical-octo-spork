@@ -106,3 +106,30 @@ def apply_blend(P: pd.DataFrame, blend: dict | None = None) -> pd.DataFrame:
         z = blend["bias"] + blend["w_model"] * _logit(out.loc[has, "p_a"]) + blend["w_market"] * _logit(out.loc[has, "market_p_a"])
         out.loc[has, "p_blend"] = 1 / (1 + np.exp(-z))
     return out
+
+
+# --------------------------------------------------------------------------- persistence from the app
+def push_odds_to_github() -> tuple[bool, str]:
+    """Commit data/odds.csv and data/odds_history.csv through the GitHub API (same token as saved picks), so
+    lines pasted into the app survive redeploys and feed the closing-line table and the blend."""
+    from . import picks
+    import base64, requests as rq
+    if not picks._token():
+        return False, "no GitHub token (lines kept on this server only)"
+    ok_all, msgs = True, []
+    for path in (config.ODDS_CSV, config.ODDS_HISTORY_CSV):
+        if not path.exists():
+            continue
+        rel = f"data/{path.name}"
+        url = f"https://api.github.com/repos/{picks._repo()}/contents/{rel}"
+        try:
+            r = rq.get(url, headers=picks._gh_headers(), timeout=15)
+            sha = r.json().get("sha") if r.status_code == 200 else None
+            body = {"message": f"lines from the app {pd.Timestamp.now(tz='UTC'):%Y-%m-%d %H:%M}", "content": base64.b64encode(path.read_bytes()).decode()}
+            if sha:
+                body["sha"] = sha
+            r = rq.put(url, headers={**picks._gh_headers(), "Content-Type": "application/json"}, json=body, timeout=20)
+            r.raise_for_status(); msgs.append(f"{rel} saved")
+        except Exception as ex:
+            ok_all = False; msgs.append(f"{rel}: {ex}")
+    return ok_all, "; ".join(msgs)

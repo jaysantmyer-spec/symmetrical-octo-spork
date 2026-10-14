@@ -306,7 +306,16 @@ with tab_price:
                 st.code("\n".join(dk.LAST_FETCH_LOG) or "(no log)")
     cfb.caption("Tries DraftKings' public odds feed for league 208037 (TT Elite Series) from the app's own server.")
     with st.expander("Paste DraftKings lines (if the automatic feed has nothing)"):
-        st.caption("One match per line: `Oskar Jadach -150 / Wojciech Urban +120`. Names can be last name + initial.")
+        st.caption("One match per line: `Oskar Jadach -150 / Wojciech Urban +120`. Names can be last name + initial. "
+                   "Fastest way to fill this: open DraftKings' TT Elite page in your browser and click the **Copy DK lines** bookmark "
+                   "(setup in DEPLOY.md) — it copies every line on the page in this format; paste here and press the button. "
+                   "With a GitHub token in Secrets the lines are stored in the repo, so they count toward the model × market blend.")
+        with st.expander("Set up the 'Copy DK lines' bookmark (one time)"):
+            st.markdown("1. In Safari (or Chrome), bookmark any page and name it **Copy DK lines**.\n"
+                        "2. Edit that bookmark and replace its address with the whole text below (hover the box, click the copy icon).\n"
+                        "3. Open DraftKings' TT Elite Series page, click the bookmark: it copies every match's moneyline. Paste below, press the button.")
+            bm = config.ROOT / "scripts" / "bookmarklet.txt"
+            st.code(bm.read_text().strip() if bm.exists() else "(bookmarklet file missing)", language=None)
         txt = st.text_area("Lines", height=120, key="paste_odds")
         if st.button("Use these lines"):
             o = dk.parse_pasted(txt)
@@ -314,7 +323,9 @@ with tab_price:
                 st.error("Couldn't read any lines.")
             else:
                 dk.snapshot_odds(o)
-                st.success(f"Saved {len(o)} lines. Re-pricing below.")
+                from tt_oracle.market import push_odds_to_github
+                okp, msgp = push_odds_to_github()
+                st.success(f"Saved {len(o)} lines ({msgp}). Re-pricing below.")
                 st.cache_data.clear()
                 odds = store.read(config.ODDS_CSV)
     if pred.empty:
