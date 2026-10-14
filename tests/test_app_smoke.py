@@ -47,7 +47,7 @@ def make_st():
     st.radio = lambda label, options, **k: list(options)[0]
     st.select_slider = lambda label, options=(), value=None, **k: value
     st.slider = lambda label, lo, hi, value, *a, **k: value
-    st.checkbox = lambda label, value=False, **k: value
+    st.checkbox = lambda label, value=False, **k: (st.session_state.__setitem__(k["key"], value) if "key" in k else None) or value
     st.text_input = lambda label, value="", **k: value
     st.json = lambda *a, **k: None
     st.code = lambda *a, **k: None

@@ -40,6 +40,21 @@ h1, h2, h3 {{ font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }}
 
 
 MATCH_COLS = ["match_id", "post_id", "start_time", "session", "venue", "player_a", "player_b", "sets_a", "sets_b", "finished", "winner"]
+SITE_TZ, HOME_TZ = "Europe/Warsaw", "America/New_York"      # data is in the site's (Polish) clock; shown in US Eastern
+
+
+def to_local(t):
+    """Series or Timestamp in the site's clock -> the viewer's clock (naive), when the sidebar toggle is on."""
+    if not st.session_state.get("show_local", True):
+        return t
+    if isinstance(t, pd.Series):
+        return pd.to_datetime(t).dt.tz_localize(SITE_TZ, ambiguous="NaT", nonexistent="shift_forward").dt.tz_convert(HOME_TZ).dt.tz_localize(None)
+    t = pd.Timestamp(t)
+    return t.tz_localize(SITE_TZ, ambiguous="NaT", nonexistent="shift_forward").tz_convert(HOME_TZ).tz_localize(None) if t.tzinfo is None else t.tz_convert(HOME_TZ).tz_localize(None)
+
+
+def tz_label() -> str:
+    return "ET" if st.session_state.get("show_local", True) else "Poland"
 
 
 @st.cache_data(show_spinner=False)
@@ -63,6 +78,8 @@ def _sig():
 
 
 with st.sidebar:
+    st.checkbox("Show times in US Eastern", value=True, key="show_local",
+                help="Off: the site's own clock (Poland, 6 hours ahead of New York).")
     merge_names = st.checkbox("Merge name spellings", value=merge_enabled(),
                               help="The site spells players with and without Polish accents (Radło / Radlo) and with typos. "
                                    "On: treated as one player. Off: the old behaviour. Permanent default: TT_MERGE_NAMES setting.")
@@ -80,7 +97,7 @@ def card_html(r) -> str:
     hi = r["confidence"] in ("Strong", "Solid") and not bool(r.get("thin_history", False))
     badge = f'<span class="badge">{e(str(r["confidence"]))} pick</span>' if hi else ""
     thin = '<span class="badge warn">thin history</span>' if bool(r.get("thin_history", False)) else ""
-    t = pd.Timestamp(r["start_time"])
+    t = to_local(r["start_time"])
     mk = ""
     if pd.notna(r.get("market_p_a")):
         edge = pa - r["market_p_a"]
@@ -88,7 +105,7 @@ def card_html(r) -> str:
         mk = (f'<div class="line">DraftKings: {e(str(r["player_a"]))} {dk.decimal_to_american(r["dk_odds_a"])} / '
               f'{e(str(r["player_b"]))} {dk.decimal_to_american(r["dk_odds_b"])} · market {r["market_p_a"]:.0%} · '
               f'model sees {abs(edge):.0%} more on <b>{e(str(side))}</b></div>')
-    return f"""<div class="m{' hi' if hi else ''}"><div class="meta"><span>{t:%a %d %b %H:%M} · {e(str(r['session']))} · {e(str(r['venue']))}</span><span>{thin} {badge}</span></div>
+    return f"""<div class="m{' hi' if hi else ''}"><div class="meta"><span>{t:%a %d %b %I:%M %p} {tz_label()} · {e(str(r['session']))} · {e(str(r['venue']))}</span><span>{thin} {badge}</span></div>
 <div class="names"><div class="a">{e(str(r['player_a']))}</div><div class="b">{e(str(r['player_b']))}</div></div>
 <div class="split"><div class="ra" style="width:{pa*100:.1f}%"></div><div class="rb" style="width:{(1-pa)*100:.1f}%"></div></div>
 <div class="pcts"><span style="color:{ORANGE}">{pa:.0%}</span><span style="color:{NAVY}">{1-pa:.0%}</span></div>
@@ -133,7 +150,7 @@ with st.sidebar:
     else:
         fin = matches[matches["finished"]]
         st.write(f"**{len(fin):,}** matches since {fin['start_time'].min():%b %Y}, **{matches['player_a'].nunique():,}** players")
-        st.write(f"Results through **{fin['start_time'].max():%d %b %Y %H:%M}**")
+        st.write(f"Results through **{to_local(fin['start_time'].max()):%d %b %Y %I:%M %p} {tz_label()}**")
         st.write(f"**{int((~matches['finished']).sum())}** upcoming on file")
     if config.STATE_FILE.exists():
         st.caption(f"Learners: {', '.join(state.get('learners') or [])}")
@@ -164,6 +181,7 @@ with tab_today:
     else:
         P = pred.copy()
         P["start_time"] = pd.to_datetime(P["start_time"])
+        P["start_local"] = to_local(P["start_time"])
         P = P.sort_values("start_time")
         # ---- which picks to show: everything, or only picks at or above a probability you choose
         ok = ~P["thin_history"].astype(bool)
@@ -183,16 +201,16 @@ with tab_today:
         picks75 = sel_all.copy() if min_p else P[(P["pick_prob"] >= 0.75) & ok].copy()
         if not picks75.empty:
             hi_t = min(0.95, (min_p or 0.75) + 0.10)
-            picks75["day"] = picks75["start_time"].dt.date
+            picks75["day"] = picks75["start_local"].dt.date
             by_day = picks75.groupby("day").agg(picks=("match_id", "size"), at85=("pick_prob", lambda v: int((v >= hi_t).sum())))
             summary = " · ".join(f"{pd.Timestamp(d):%a %d %b}: {int(r['picks'])} ({int(r['at85'])} at {hi_t:.0%}+)" for d, r in by_day.iterrows())
             with st.expander(f"Where the {len(picks75)} {label.lower() if min_p else '75%+ picks'} are — {summary}", expanded=False):
-                tbl = picks75.sort_values("start_time")[["start_time", "session", "player_a", "player_b", "pick", "pick_prob", "confidence"]].copy()
-                tbl["when"] = tbl["start_time"].dt.strftime("%a %d %b %H:%M")
+                tbl = picks75.sort_values("start_time")[["start_local", "session", "player_a", "player_b", "pick", "pick_prob", "confidence"]].copy()
+                tbl["when"] = tbl["start_local"].dt.strftime("%a %d %b %I:%M %p")
                 tbl["match"] = tbl["player_a"].astype(str) + " vs " + tbl["player_b"].astype(str)
                 st.dataframe(tbl[["when", "session", "match", "pick", "pick_prob", "confidence"]].rename(columns={"pick_prob": "model"})
                              .style.format({"model": "{:.0%}"}), hide_index=True, height=min(500, 40 + 35 * len(tbl)))
-                st.caption("Times are the site's local time (Poland). Pick the day below to see the full cards; choose 'All days' to list everything.")
+                st.caption(f"Times in {tz_label()}. Pick the day below to see the full cards; choose 'All days' to list everything.")
 
         # ---- DraftKings matches: a key-based odds provider, DraftKings' own feed, or pasted lines
         with st.expander("DraftKings matches — odds feed", expanded=odds.empty):
@@ -240,11 +258,11 @@ with tab_today:
         if not odds.empty:
             P = dk.attach_market(P, odds)      # re-match with whatever lines are loaded right now
         cd1, cd3 = st.columns([1, 1])
-        days = sorted(P["start_time"].dt.date.unique())
+        days = sorted(P["start_local"].dt.date.unique())
         day = cd1.selectbox("Day", ["All days"] + days, index=1 if days else 0)
         only_dk = cd3.checkbox("Only matches on DraftKings", value=False, help="Show just the matches that have a line loaded")
         q = st.text_input("Search a player or match", placeholder="e.g. Jadach, or Jadach Urban", key="today_q")
-        view = P if day == "All days" else P[P["start_time"].dt.date == day]
+        view = P if day == "All days" else P[P["start_local"].dt.date == day]
         if only_dk:
             view = view[view["market_p_a"].notna()]
         if min_p > 0:
@@ -257,13 +275,13 @@ with tab_today:
             both = (view["player_a"].map(_fold) + " " + view["player_b"].map(_fold))
             view = view[both.apply(lambda s: all(w in s for w in words))]
             if view.empty:
-                view = P if day == "All days" else P[P["start_time"].dt.date == day]
+                view = P if day == "All days" else P[P["start_local"].dt.date == day]
                 both = (view["player_a"].map(_fold) + " " + view["player_b"].map(_fold))
                 view = view[both.apply(lambda s: all(w in s for w in words))]
                 if not view.empty:
                     st.caption("No match at the chosen probability filter; showing all matches for that search.")
         st.caption(f"{len(view)} matches shown" + (f" — picks at {min_p:.0%}+ (players with thin history excluded)" if min_p and not q.strip() else " — all picks"))
-        for d, vd in view.groupby(view["start_time"].dt.date, sort=True):
+        for d, vd in view.groupby(view["start_local"].dt.date, sort=True):
             if day == "All days":
                 st.markdown(f"### {pd.Timestamp(d):%A %d %B} · {len(vd)} matches")
             for sess in config.SESSIONS:
@@ -357,11 +375,13 @@ with tab_price:
         st.subheader(f"Flagged bets: {len(flagged)}")
         fmt = {"p_model": "{:.0%}", "p_market": "{:.0%}", "edge": "{:+.1%}", "ev": "{:+.2f}", "stake": "${:,.0f}"}
         if not flagged.empty:
+            flagged = flagged.assign(start_time=to_local(flagged["start_time"]).dt.strftime("%a %d %b %I:%M %p"))
             st.dataframe(flagged[["start_time", "player", "opponent", "p_model", "fair", "dk", "p_market", "edge", "ev", "stake"]]
                          .style.format(fmt), hide_index=True)
         else:
             st.caption("Nothing clears the bar right now" + ("" if not odds.empty else " — no DraftKings lines loaded."))
         st.subheader("Every side")
+        priced = priced.assign(start_time=to_local(priced["start_time"]).dt.strftime("%a %d %b %I:%M %p"))
         st.dataframe(priced[["start_time", "player", "opponent", "p_model", "fair", "dk", "market", "edge", "ev", "stake", "thin", "bet"]]
                      .style.format(fmt), hide_index=True)
 
@@ -413,7 +433,7 @@ with tab_h2h:
                 pr = mdl.predict(row).iloc[0]
                 pr["elo_p_a"] = row["elo_p_a"].iloc[0]; pr["h2h_n"] = len(h)
                 pr["A_today_n"], pr["B_today_n"] = 0, 0
-                pr["session"], pr["venue"], pr["start_time"] = sess, "any venue", pd.Timestamp.now()
+                pr["session"], pr["venue"], pr["start_time"] = sess, "any venue", pd.Timestamp.now(tz=SITE_TZ).tz_localize(None)
                 st.markdown(card_html(pr), unsafe_allow_html=True)
                 save_button(pr, "h2h", f"save_h2h_{a}_{b}_{sess}")
                 # the same breakdown the Today cards carry, spelled out
@@ -440,7 +460,8 @@ with tab_h2h:
         c2.metric("Head to head", f"{aw}–{len(h) - aw}")
         c3.metric(f"{b} Elo", f"{sb['elo']:.0f}", f"last 10: {sb['win10']:.0%}")
         if not h.empty:
-            st.dataframe(h[["start_time", "session", "venue", "player_a", "sets_a", "sets_b", "player_b"]], hide_index=True)
+            hh = h.assign(start_time=to_local(h["start_time"]).dt.strftime("%Y-%m-%d %I:%M %p"))
+            st.dataframe(hh[["start_time", "session", "venue", "player_a", "sets_a", "sets_b", "player_b"]], hide_index=True)
         st.subheader("Ratings leaderboard")
         st.dataframe(snap.head(40).rename(columns={"n": "matches"}).style.format({"elo": "{:.0f}", "win10": "{:.0%}"}), hide_index=True)
 
@@ -462,10 +483,11 @@ with tab_mine:
         show = mine.sort_values("start_time", ascending=False).copy()
         show["match"] = show["player_a"].astype(str) + " vs " + show["player_b"].astype(str)
         show["result"] = show["result"].fillna("pending")
+        show["start_time"] = to_local(show["start_time"]).dt.strftime("%a %d %b %I:%M %p")
         st.dataframe(show[["start_time", "session", "match", "pick", "p_pick", "confidence", "dk_odds", "source", "result", "winner"]]
                      .rename(columns={"p_pick": "model"}).style.format({"model": "{:.0%}"}), hide_index=True)
         st.subheader("Manage")
-        labels = {r["pick_id"]: f"{pd.Timestamp(r['start_time']):%d %b %H:%M} · {r['pick']} vs {r['player_b'] if r['pick'] == r['player_a'] else r['player_a']}"
+        labels = {r["pick_id"]: f"{r['start_time']} · {r['pick']} vs {r['player_b'] if r['pick'] == r['player_a'] else r['player_a']}"
                   for _, r in show.iterrows()}
         sel = st.multiselect("Remove selected picks", options=list(labels), format_func=labels.get)
         cm1, cm2 = st.columns([1, 3])
