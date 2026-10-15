@@ -159,7 +159,7 @@ with st.sidebar:
     st.divider()
     st.caption("Data refreshes every 6 hours via GitHub Actions. Predictions are logged before each match and graded after.")
 
-tab_today, tab_price, tab_live, tab_h2h, tab_mine, tab_track, tab_data = st.tabs(["Today", "Pricing desk", "Live", "Head to head", "My picks", "Track record", "Data"])
+tab_today, tab_mis, tab_price, tab_live, tab_h2h, tab_mine, tab_track, tab_data = st.tabs(["Today", "Mismatches", "Pricing desk", "Live", "Head to head", "My picks", "Track record", "Data"])
 
 
 def save_button(r, source: str, key: str):
@@ -293,6 +293,60 @@ with tab_today:
                     st.markdown(card_html(r), unsafe_allow_html=True)
                     save_button(r, "today", f"save_{r['match_id']}")
         st.download_button("Download predictions (CSV)", P.to_csv(index=False), file_name="tt_predictions.csv")
+
+
+# --------------------------------------------------------------------------- mismatches (model vs DraftKings)
+with tab_mis:
+    st.write("Matches where the model and DraftKings disagree. A **flip** is when they favour different players; a **gap** is a "
+             "disagreement in degree (same favourite, but the model is much more or less sure). Both need a line loaded — paste "
+             "DraftKings' page on the Pricing desk to refresh them.")
+    if pred.empty or odds.empty:
+        st.info("Needs predictions and DraftKings lines (paste them on the Pricing desk).")
+    else:
+        Mm = dk.attach_market(pred, odds)
+        Mm["start_time"] = pd.to_datetime(Mm["start_time"])
+        Mm = Mm[Mm["market_p_a"].notna() & (Mm["start_time"] >= pd.Timestamp.now(tz=SITE_TZ).tz_localize(None) - pd.Timedelta(hours=1))].copy()
+        if Mm.empty:
+            st.info("No upcoming match has a DraftKings line right now.")
+        else:
+            Mm["edge_a"] = Mm["p_a"] - Mm["market_p_a"]
+            Mm["model_fav"] = np.where(Mm["p_a"] >= 0.5, Mm["player_a"], Mm["player_b"])
+            Mm["dk_fav"] = np.where(Mm["market_p_a"] >= 0.5, Mm["player_a"], Mm["player_b"])
+            Mm["flip"] = Mm["model_fav"] != Mm["dk_fav"]
+            Mm["gap"] = Mm["edge_a"].abs()
+            # the side the model likes relative to the book, with its DraftKings price and fair price
+            Mm["side"] = np.where(Mm["edge_a"] > 0, Mm["player_a"], Mm["player_b"])
+            Mm["side_p"] = np.where(Mm["edge_a"] > 0, Mm["p_a"], 1 - Mm["p_a"])
+            Mm["side_mkt"] = np.where(Mm["edge_a"] > 0, Mm["market_p_a"], 1 - Mm["market_p_a"])
+            Mm["side_dk"] = np.where(Mm["edge_a"] > 0, Mm["dk_odds_a"], Mm["dk_odds_b"])
+            Mm["ev"] = Mm["side_p"] * (Mm["side_dk"] - 1) - (1 - Mm["side_p"])
+            c1, c2, c3 = st.columns([1, 1, 2])
+            min_gap = c1.slider("Minimum gap", 0, 30, 8, 1, format="%d%%", key="mis_gap") / 100.0
+            only_flips = c2.checkbox("Flips only", value=False, help="Only matches where model and DraftKings favour different players")
+            hide_thin = c3.checkbox("Hide thin-history players", value=True)
+            V = Mm[Mm["gap"] >= min_gap]
+            if only_flips:
+                V = V[V["flip"]]
+            if hide_thin:
+                V = V[~V["thin_history"].astype(bool)]
+            V = V.sort_values("gap", ascending=False)
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Matches with a line", len(Mm)); k2.metric("Flips", int(Mm["flip"].sum())); k3.metric("Shown", len(V))
+            if V.empty:
+                st.caption("Nothing clears the gap you set.")
+            tbl = V.assign(when=V["start_time"].map(lambda t: to_local(t).strftime("%a %I:%M %p")),
+                           match=V["player_a"] + " v " + V["player_b"],
+                           model=V["side_p"], draftkings=V["side_mkt"], dk_price=V["side_dk"].map(dk.decimal_to_american),
+                           fair=V["side_p"].map(dk.fair_american), kind=np.where(V["flip"], "FLIP", "gap"))
+            st.dataframe(tbl[["when", "match", "kind", "side", "model", "draftkings", "gap", "dk_price", "fair", "ev"]]
+                         .rename(columns={"side": "model leans", "model": "model %", "draftkings": "DK %", "dk_price": "DK price", "ev": "EV per $1"})
+                         .style.format({"model %": "{:.0%}", "DK %": "{:.0%}", "gap": "{:.0%}", "EV per $1": "{:+.2f}"}), hide_index=True,
+                         height=min(600, 40 + 36 * max(len(tbl), 1)))
+            st.caption("'model leans' is the side the model rates higher than DraftKings does; 'EV per $1' is the expected profit of $1 on that side at "
+                       "DraftKings' price if the model is right. Flips are the strongest disagreements; use the Live tab once a game or two is in.")
+            for _, r in V.head(30).iterrows():
+                st.markdown(card_html(r), unsafe_allow_html=True)
+                save_button(r, "today", f"save_mis_{r['match_id']}")
 
 # --------------------------------------------------------------------------- pricing desk
 with tab_price:
