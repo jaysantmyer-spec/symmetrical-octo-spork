@@ -159,7 +159,7 @@ with st.sidebar:
     st.divider()
     st.caption("Data refreshes every 6 hours via GitHub Actions. Predictions are logged before each match and graded after.")
 
-tab_today, tab_price, tab_h2h, tab_mine, tab_track, tab_data = st.tabs(["Today", "Pricing desk", "Head to head", "My picks", "Track record", "Data"])
+tab_today, tab_price, tab_live, tab_h2h, tab_mine, tab_track, tab_data = st.tabs(["Today", "Pricing desk", "Live", "Head to head", "My picks", "Track record", "Data"])
 
 
 def save_button(r, source: str, key: str):
@@ -384,6 +384,56 @@ with tab_price:
         priced = priced.assign(start_time=to_local(priced["start_time"]).dt.strftime("%a %d %b %I:%M %p"))
         st.dataframe(priced[["start_time", "player", "opponent", "p_model", "fair", "dk", "market", "edge", "ev", "stake", "thin", "bet"]]
                      .style.format(fmt), hide_index=True)
+
+
+# --------------------------------------------------------------------------- live (in-match)
+with tab_live:
+    from tt_oracle import live as LV
+    lm = LV.load()
+    st.write("Enter the games played so far and the model updates the winner, the likely final score and the expected total. "
+             "Fitted on a year of game-by-game scores: after one game it calls the winner 74% of the time, after two 76%, after three 80%.")
+    if lm is None:
+        st.info("The live model appears after the next refresh run.")
+    else:
+        src = st.radio("Match", ["From today's list", "Any two players (enter pre-match %)"], horizontal=True, key="live_src")
+        p_pre, a, b = None, "Player A", "Player B"
+        if src == "From today's list" and not pred.empty:
+            Pl = pred.copy(); Pl["start_time"] = pd.to_datetime(Pl["start_time"])
+            Pl = Pl[Pl["start_time"] >= pd.Timestamp.now(tz=SITE_TZ).tz_localize(None) - pd.Timedelta(hours=2)].sort_values("start_time")
+            lq = st.text_input("Search the match", placeholder="e.g. Kosmal", key="live_q")
+            Pl = search_filter(Pl, lq, ["player_a", "player_b"]) if lq.strip() else Pl
+            if Pl.empty:
+                st.caption("No upcoming match matches that search.")
+            else:
+                opts = {r["match_id"]: f"{to_local(r['start_time']):%a %I:%M %p} · {r['player_a']} v {r['player_b']} ({float(r['p_a']):.0%})" for _, r in Pl.head(80).iterrows()}
+                mid = st.selectbox("Pick the match", list(opts), format_func=opts.get, key="live_match")
+                r = Pl[Pl["match_id"] == mid].iloc[0]
+                p_pre, a, b = float(r["p_a"]), r["player_a"], r["player_b"]
+        else:
+            c1, c2, c3 = st.columns(3)
+            a = c1.text_input("Player A", "Player A", key="live_a"); b = c2.text_input("Player B", "Player B", key="live_b")
+            p_pre = c3.slider(f"Pre-match chance for {a}", 5, 95, 60, 1, format="%d%%", key="live_p") / 100.0
+        if p_pre is not None:
+            st.markdown(f"**{a}** pre-match **{p_pre:.0%}** · **{b}** {1 - p_pre:.0%}")
+            st.caption("Points in each game played so far (leave the rest at 0). Example: 11 / 7 means A won the game 11-7.")
+            games = []
+            cols = st.columns(4)
+            for i in range(4):
+                with cols[i]:
+                    ga = st.number_input(f"G{i + 1} {a[:12]}", 0, 40, 0, key=f"live_g{i}a")
+                    gb = st.number_input(f"G{i + 1} {b[:12]}", 0, 40, 0, key=f"live_g{i}b")
+                    games.append((ga, gb))
+            res = LV.predict(p_pre, games, lm)
+            k = len([g for g in games if sum(g) > 0])
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric(f"{a} wins", f"{res['p_a']:.0%}", f"{res['p_a'] - p_pre:+.0%} vs pre-match")
+            m2.metric(f"{b} wins", f"{res['p_b']:.0%}")
+            m3.metric("Games", f"{res['games_a']}–{res['games_b']}", f"{k} played")
+            m4.metric("Expected total points", f"{res['exp_total_points']:.0f}", f"{res['pts_so_far']} so far")
+            sc = pd.DataFrame({"final score (A–B)": list(res["scores"]), "probability": list(res["scores"].values())})
+            st.dataframe(sc.style.format({"probability": "{:.0%}"}), hide_index=True, height=min(300, 40 + 36 * len(sc)))
+            st.caption(f"Fair live price: {a} {dk.fair_american(res['p_a'])} · {b} {dk.fair_american(res['p_b'])}. "
+                       "Compare with DraftKings' live line; the model knows nothing about injuries, serve or momentum beyond the points.")
 
 # --------------------------------------------------------------------------- head to head
 with tab_h2h:

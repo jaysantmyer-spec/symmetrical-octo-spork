@@ -188,6 +188,12 @@ def run_cycle(progress=None, scrape: bool = True, odds: bool = True) -> dict:
     out["learn"] = relearn()
     pred = retrain()
     out["model"] = pred.meta
+    try:
+        from . import live
+        lmodel = live.fit(feat=features_now())
+        out["live_model"] = {k: v for k, v in lmodel.items() if k in ("n",)} if lmodel else "skipped (needs points data)"
+    except Exception as ex:
+        out["live_model"] = f"failed: {ex}"
     P = predict_upcoming(pred)
     out["predicted"] = int(len(P))
     return out

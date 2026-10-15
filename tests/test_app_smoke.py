@@ -56,7 +56,7 @@ def make_st():
     st.rerun = lambda: None
     st.text_area = lambda label, value="", **k: value
     st.date_input = lambda label, value=None, **k: value
-    st.number_input = lambda label, lo=None, hi=None, value=0, **k: value
+    st.number_input = lambda label, lo=None, hi=None, value=0, *a, **k: value
     st.file_uploader = lambda *a, **k: None
     st.button = lambda label, **k: label in PRESS
     st.session_state = {}
