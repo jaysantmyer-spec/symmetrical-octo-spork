@@ -574,17 +574,19 @@ with tab_live:
             sp = LV.spreads(res["p_a"], games, point_lines=tuple(sorted({3.5, 5.5, 7.5, float(extra_line)})))
             cur_margin = sum(ga - gb for ga, gb in games)
             rows_ls = []
+            def _side(label, pr):
+                rows_ls.append({"side": label, "chance": pr, "fair price": fair(pr)})
             for L in (1.5, 2.5):
                 pa_, pb_ = sp["games"][L], 1 - sp["games"][-L]
-                rows_ls.append({"market": f"Games −{L} / +{L}", a: pa_, f"{a} fair": fair(pa_), b: pb_, f"{b} fair": fair(pb_),
-                                "note": f"{a} +{L}: {1 - pb_:.0%} · {b} +{L}: {1 - pa_:.0%}"})
+                _side(f"{a} −{L} games", pa_); _side(f"{b} +{L} games", 1 - pa_)
+                _side(f"{b} −{L} games", pb_); _side(f"{a} +{L} games", 1 - pb_)
             for L in sorted(sp["points"]):
                 if L <= 0:
                     continue
                 pa_, pb_ = sp["points"][L], 1 - sp["points"][-L]
-                rows_ls.append({"market": f"Points −{L} / +{L}", a: pa_, f"{a} fair": fair(pa_), b: pb_, f"{b} fair": fair(pb_),
-                                "note": f"{a} +{L}: {1 - pb_:.0%} · {b} +{L}: {1 - pa_:.0%}"})
-            st.dataframe(pd.DataFrame(rows_ls).style.format({a: "{:.0%}", b: "{:.0%}"}), hide_index=True)
+                _side(f"{a} −{L} points", pa_); _side(f"{b} +{L} points", 1 - pa_)
+                _side(f"{b} −{L} points", pb_); _side(f"{a} +{L} points", 1 - pb_)
+            st.dataframe(pd.DataFrame(rows_ls).style.format({"chance": "{:.0%}"}), hide_index=True, height=min(600, 40 + 36 * len(rows_ls)))
             em = sp["exp_point_margin"]
             st.caption(f"Points so far: {a} {cur_margin:+d}. Expected final points margin: {a if em >= 0 else b} by {abs(em):.1f}. "
                        "−L = that player giving L games/points and still winning by more. Game margins are projected at the pair's "
@@ -660,16 +662,18 @@ with tab_h2h:
                     t3.metric(f"{b} wins if takes game 1", f"{1 - float(pr['p_a_if_lost_g1']):.0%}")
                 if pd.notna(pr.get("p_a_pts_m35")):
                     st.markdown("**Spreads** (chance each side covers, with the fair price)")
-                    rows_sp = [{"market": "Games −1.5 / +1.5", a: float(pr["p_a_games_m15"]), b: float(pr["p_b_games_m15"]),
-                                "note": f"{a} −1.5 = wins 3-0 or 3-1; {a} +1.5 = {1 - float(pr['p_b_games_m15']):.0%}"}]
+                    rows_sp = []
+                    def _side2(label, prob):
+                        rows_sp.append({"side": label, "chance": float(prob), "fair price": fair(prob)})
+                    ga_, gb_ = float(pr["p_a_games_m15"]), float(pr["p_b_games_m15"])
+                    _side2(f"{a} −1.5 games (wins 3-0 or 3-1)", ga_); _side2(f"{b} +1.5 games", 1 - ga_)
+                    _side2(f"{b} −1.5 games (wins 3-0 or 3-1)", gb_); _side2(f"{a} +1.5 games", 1 - gb_)
                     for L in M.Predictor.POINT_LINES:
                         tag = str(L).replace(".", "")
-                        rows_sp.append({"market": f"Points −{L} / +{L}", a: float(pr[f"p_a_pts_m{tag}"]), b: float(pr[f"p_b_pts_m{tag}"]),
-                                        "note": f"{a} +{L} = {1 - float(pr[f'p_b_pts_m{tag}']):.0%} · {b} +{L} = {1 - float(pr[f'p_a_pts_m{tag}']):.0%}"})
-                    sp = pd.DataFrame(rows_sp)
-                    sp[f"{a} fair"] = sp[a].map(fair); sp[f"{b} fair"] = sp[b].map(fair)
-                    st.dataframe(sp[["market", a, f"{a} fair", b, f"{b} fair", "note"]].style.format({a: "{:.0%}", b: "{:.0%}"}),
-                                 hide_index=True)
+                        pa_, pb_ = float(pr[f"p_a_pts_m{tag}"]), float(pr[f"p_b_pts_m{tag}"])
+                        _side2(f"{a} −{L} points", pa_); _side2(f"{b} +{L} points", 1 - pa_)
+                        _side2(f"{b} −{L} points", pb_); _side2(f"{a} +{L} points", 1 - pb_)
+                    st.dataframe(pd.DataFrame(rows_sp).style.format({"chance": "{:.0%}"}), hide_index=True, height=40 + 36 * len(rows_sp))
                     em = float(pr["exp_point_margin"])
                     st.caption(f"Each −L column is that player giving L points (or games) and still winning by more. "
                                f"Expected total-points margin: {a if em >= 0 else b} by {abs(em):.1f}.")
