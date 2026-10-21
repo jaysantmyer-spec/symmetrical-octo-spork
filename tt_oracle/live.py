@@ -125,6 +125,55 @@ def score_distribution(p: float, wa: int, wb: int) -> dict:
     return dict(sorted(out.items(), key=lambda kv: -kv[1]))
 
 
+# per-game point margin from the vendor data: a won game is won by ~3.9 points (sd 1.9), a little more for the
+# stronger player; used to project the remaining games onto the current points margin
+GAME_MARGIN, GAME_MARGIN_SD, GAME_MARGIN_SLOPE = 3.85, 1.92, 1.25
+
+
+def spreads(p: float, games: list, point_lines=(3.5, 5.5, 7.5), game_lines=(1.5, 2.5)) -> dict:
+    """Live game and points spreads from the current state.
+    Returns {"games": {line: P(A's final game margin > line)}, "points": {line: P(A's final point margin > line)},
+             "exp_point_margin": float} for lines from A's side (negative lines = A getting games/points)."""
+    from math import comb
+    from scipy.stats import norm
+    games = [(int(a), int(b)) for a, b in games if a is not None and b is not None and (a + b) > 0]
+    wa = sum(1 for a, b in games if a > b); wb = sum(1 for a, b in games if b > a)
+    cur = sum(a - b for a, b in games)
+    out = {"games": {}, "points": {}}
+    if wa >= 3 or wb >= 3:                                              # match over: everything is known
+        gm = wa - wb
+        for L in game_lines:
+            out["games"][L], out["games"][-L] = float(gm > L), float(gm > -L)
+        for L in point_lines:
+            out["points"][L], out["points"][-L] = float(cur > L), float(cur > -L)
+        out["exp_point_margin"] = float(cur)
+        return out
+    q = _solve_q(min(max(p, 0.005), 0.995), wa, wb)
+    mw = GAME_MARGIN + GAME_MARGIN_SLOPE * (q - 0.5)                    # A's margin in a game it wins
+    ml = -GAME_MARGIN + GAME_MARGIN_SLOPE * (q - 0.5)                   # A's margin in a game it loses
+    paths = []                                                          # (prob, A wins left, B wins left)
+    need_a, need_b = 3 - wa, 3 - wb
+    for extra in range(need_b):
+        paths.append((comb(need_a - 1 + extra, extra) * q ** need_a * (1 - q) ** extra, need_a, extra))
+    for extra in range(need_a):
+        paths.append((comb(need_b - 1 + extra, extra) * (1 - q) ** need_b * q ** extra, extra, need_b))
+    exp = 0.0
+    for pr, w, l in paths:
+        exp += pr * (cur + w * mw + l * ml)
+    out["exp_point_margin"] = float(exp)
+    for L in game_lines:
+        for sign in (1, -1):
+            out["games"][sign * L] = float(sum(pr for pr, w, l in paths if (wa + w) - (wb + l) > sign * L))
+    for L in point_lines:
+        for sign in (1, -1):
+            tot = 0.0
+            for pr, w, l in paths:
+                mu = cur + w * mw + l * ml; sd = np.sqrt((w + l) * GAME_MARGIN_SD ** 2) if (w + l) else 0.0
+                tot += pr * ((1 - norm.cdf((sign * L - mu) / sd)) if sd > 0 else float(mu > sign * L))
+            out["points"][sign * L] = float(tot)
+    return out
+
+
 def predict(p_pre: float, games: list, model: dict | None = None) -> dict:
     """p_pre: pre-match P(A wins) (the model's p_a); games: [(a_pts, b_pts), ...] played so far (0-4 games)."""
     model = load() if model is None else model

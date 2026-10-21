@@ -553,6 +553,27 @@ with tab_live:
             st.dataframe(sc.style.format({"probability": "{:.0%}"}), hide_index=True, height=min(300, 40 + 36 * len(sc)))
             st.caption(f"Fair live price: {a} {dk.fair_american(res['p_a'])} · {b} {dk.fair_american(res['p_b'])}. "
                        "Compare with DraftKings' live line; the model knows nothing about injuries, serve or momentum beyond the points.")
+            # ---- live spreads from the same state
+            st.markdown("**Live spreads** (chance each side covers from here, with the fair price)")
+            extra_line = st.number_input("Add a points line DraftKings is showing (e.g. 9.5)", 0.5, 40.5, 9.5, 1.0, key="live_extra_line")
+            sp = LV.spreads(res["p_a"], games, point_lines=tuple(sorted({3.5, 5.5, 7.5, float(extra_line)})))
+            cur_margin = sum(ga - gb for ga, gb in games)
+            rows_ls = []
+            for L in (1.5, 2.5):
+                pa_, pb_ = sp["games"][L], 1 - sp["games"][-L]
+                rows_ls.append({"market": f"Games −{L} / +{L}", a: pa_, f"{a} fair": fair(pa_), b: pb_, f"{b} fair": fair(pb_),
+                                "note": f"{a} +{L}: {1 - pb_:.0%} · {b} +{L}: {1 - pa_:.0%}"})
+            for L in sorted(sp["points"]):
+                if L <= 0:
+                    continue
+                pa_, pb_ = sp["points"][L], 1 - sp["points"][-L]
+                rows_ls.append({"market": f"Points −{L} / +{L}", a: pa_, f"{a} fair": fair(pa_), b: pb_, f"{b} fair": fair(pb_),
+                                "note": f"{a} +{L}: {1 - pb_:.0%} · {b} +{L}: {1 - pa_:.0%}"})
+            st.dataframe(pd.DataFrame(rows_ls).style.format({a: "{:.0%}", b: "{:.0%}"}), hide_index=True)
+            em = sp["exp_point_margin"]
+            st.caption(f"Points so far: {a} {cur_margin:+d}. Expected final points margin: {a if em >= 0 else b} by {abs(em):.1f}. "
+                       "−L = that player giving L games/points and still winning by more. Game margins are projected at the pair's "
+                       "typical ±3.9 points per game, so the points spread is a rough guide late in a close match.")
 
 # --------------------------------------------------------------------------- head to head
 with tab_h2h:
