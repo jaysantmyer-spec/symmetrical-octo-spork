@@ -13,6 +13,21 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+# Streamlit Cloud reloads app.py on every deploy but keeps the already-imported tt_oracle modules in memory,
+# so a new app.py can call a function the old module doesn't have (AttributeError until a manual reboot).
+# Drop our own modules when any of their files changed, so they are imported fresh.
+def _reload_own_modules():
+    import importlib, sys
+    from pathlib import Path
+    pkg = Path(__file__).parent / "tt_oracle"
+    stamp = max((f.stat().st_mtime for f in pkg.glob("*.py")), default=0)
+    if st.session_state.get("_pkg_stamp") != stamp:
+        for name in [n for n in sys.modules if n == "tt_oracle" or n.startswith("tt_oracle.")]:
+            del sys.modules[name]
+        importlib.invalidate_caches()
+        st.session_state["_pkg_stamp"] = stamp
+_reload_own_modules()
+
 from tt_oracle import config, dk, picks, pipeline, store
 from tt_oracle import model as M
 from tt_oracle.names import canonicalize, fold, merge_enabled
@@ -614,7 +629,7 @@ with tab_h2h:
                 """Cached per model file version, so a retrain by the refresh workflow is picked up without a reboot."""
                 from tt_oracle.model import Predictor
                 return Predictor.load()
-            mdl = _model(config.MODEL_FILE.stat().st_mtime if config.MODEL_FILE.exists() else 0)
+            mdl = _model((config.MODEL_FILE.stat().st_mtime if config.MODEL_FILE.exists() else 0, st.session_state.get("_pkg_stamp")))
             if mdl is None:
                 st.caption("Model file not available on this server yet.")
             else:
