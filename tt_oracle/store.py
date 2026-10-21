@@ -8,7 +8,14 @@ DATE_COLS = {"date", "start_time", "fetched_at", "logged_at", "graded_at", "comm
 def read(path: Path) -> pd.DataFrame:
     if not Path(path).exists():
         return pd.DataFrame()
-    df = pd.read_csv(path)
+    df = None
+    for attempt in range(5):                     # a deploy may be rewriting the file: retry briefly instead of crashing
+        try:
+            df = pd.read_csv(path); break
+        except (pd.errors.EmptyDataError, pd.errors.ParserError, OSError):
+            import time; time.sleep(1.5)
+    if df is None:
+        return pd.DataFrame()
     for c in df.columns:
         if c in DATE_COLS:
             df[c] = pd.to_datetime(df[c], errors="coerce")

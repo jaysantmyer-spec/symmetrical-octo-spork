@@ -76,7 +76,13 @@ def tz_label() -> str:
 @st.cache_data(show_spinner=False)
 def load(sig, merge_names: bool):
     """Only what the pages show. The full history is ~300k matches; keep the app's memory small."""
-    m = pd.read_csv(config.MATCHES_CSV, usecols=MATCH_COLS, parse_dates=["start_time"]) if config.MATCHES_CSV.exists() else pd.DataFrame()
+    m = pd.DataFrame()
+    for attempt in range(5):                     # Streamlit Cloud may be mid-pull of a refresh commit: file briefly empty
+        try:
+            m = pd.read_csv(config.MATCHES_CSV, usecols=MATCH_COLS, parse_dates=["start_time"]) if config.MATCHES_CSV.exists() else pd.DataFrame()
+            break
+        except (pd.errors.EmptyDataError, pd.errors.ParserError, OSError):
+            import time; time.sleep(1.5)
     if not m.empty:
         m, _ = canonicalize(m, enabled=merge_names)
         m["finished"] = m["finished"].astype(bool)
