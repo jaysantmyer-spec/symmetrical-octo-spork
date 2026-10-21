@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from tt_oracle import config, dk, picks, pipeline, store
+from tt_oracle import model as M
 from tt_oracle.names import canonicalize, fold, merge_enabled
 
 st.set_page_config(page_title="TT Elite Oracle", page_icon="🏓", layout="wide")
@@ -109,7 +110,31 @@ def card_html(r) -> str:
 <div class="names"><div class="a">{e(str(r['player_a']))}</div><div class="b">{e(str(r['player_b']))}</div></div>
 <div class="split"><div class="ra" style="width:{pa*100:.1f}%"></div><div class="rb" style="width:{(1-pa)*100:.1f}%"></div></div>
 <div class="pcts"><span style="color:{ORANGE}">{pa:.0%}</span><span style="color:{NAVY}">{1-pa:.0%}</span></div>
-<div class="line"><b>{e(str(r['pick']))}</b> ({str(r['confidence']).lower()}). Elo alone: {r['elo_p_a']:.0%}. H2H matches: {int(r['h2h_n'])}. Today so far: {int(r['A_today_n'])} / {int(r['B_today_n'])}.</div>{games_line(r)}{points_line(r)}{mk}{blend_line(r)}</div>"""
+<div class="line"><b>{e(str(r['pick']))}</b> ({str(r['confidence']).lower()}). Elo alone: {r['elo_p_a']:.0%}. H2H matches: {int(r['h2h_n'])}. Today so far: {int(r['A_today_n'])} / {int(r['B_today_n'])}.</div>{games_line(r)}{spread_line(r)}{points_line(r)}{mk}{blend_line(r)}</div>"""
+
+
+def fair(p: float) -> str:
+    """Fair American price for a probability."""
+    return dk.decimal_to_american(1 / max(min(float(p), 0.995), 0.005))
+
+
+def spread_line(r) -> str:
+    """Games spread (±1.5) and points spread (±3.5) - DraftKings' two spread markets - with fair prices."""
+    if pd.isna(r.get("p_a_games_m15")):
+        return ""
+    a, b = html.escape(str(r["player_a"])), html.escape(str(r["player_b"]))
+    ga, gb = float(r["p_a_games_m15"]), float(r["p_b_games_m15"])
+    fav_a = float(r["p_a"]) >= 0.5
+    fav, dog, g_fav, g_dog = (a, b, ga, gb) if fav_a else (b, a, gb, ga)
+    out = (f'<div class="line" style="color:#5B6470">Games spread: {fav} −1.5 <b>{g_fav:.0%}</b> ({fair(g_fav)}) · '
+           f'{dog} +1.5 <b>{1 - g_fav:.0%}</b> ({fair(1 - g_fav)})</div>')
+    if pd.notna(r.get("p_a_pts_m35")):
+        pa35, pb35 = float(r["p_a_pts_m35"]), float(r["p_b_pts_m35"])
+        p_fav = pa35 if fav_a else pb35
+        em = float(r["exp_point_margin"]); em = em if fav_a else -em
+        out += (f'<div class="line" style="color:#5B6470">Points spread: {fav} −3.5 <b>{p_fav:.0%}</b> ({fair(p_fav)}) · '
+                f'{dog} +3.5 <b>{1 - p_fav:.0%}</b> ({fair(1 - p_fav)}) · expected margin {fav} by <b>{em:.1f}</b> points</div>')
+    return out
 
 
 def blend_line(r) -> str:
@@ -438,6 +463,46 @@ with tab_price:
         priced = priced.assign(start_time=to_local(priced["start_time"]).dt.strftime("%a %d %b %I:%M %p"))
         st.dataframe(priced[["start_time", "player", "opponent", "p_model", "fair", "dk", "market", "edge", "ev", "stake", "thin", "bet"]]
                      .style.format(fmt), hide_index=True)
+        # ---- spreads: the model's cover chance for every upcoming match, and a checker for DraftKings' prices
+        if "p_a_pts_m35" in P and P["p_a_pts_m35"].notna().any():
+            st.subheader("Spreads")
+            st.caption("DraftKings' two spread markets: games (−1.5 = wins 3-0 or 3-1) and points (−3.5 = wins the total "
+                       "points by 4 or more). Fair = the price that matches the model's chance; beat it and the bet has value.")
+            up = P[~P["finished"].astype(bool)].dropna(subset=["p_a_pts_m35"]).sort_values("start_time")
+            if pq.strip():
+                both = up["player_a"].map(_fold2) + " " + up["player_b"].map(_fold2)
+                up = up[both.apply(lambda s: all(w in s for w in words))]
+            rows_sp = []
+            for _, r in up.iterrows():
+                fav_a = float(r["p_a"]) >= 0.5
+                fav, dog = (r["player_a"], r["player_b"]) if fav_a else (r["player_b"], r["player_a"])
+                g = float(r["p_a_games_m15"] if fav_a else r["p_b_games_m15"]); p35 = float(r["p_a_pts_m35"] if fav_a else r["p_b_pts_m35"])
+                em = float(r["exp_point_margin"]); em = em if fav_a else -em
+                rows_sp.append({"start_time": to_local(r["start_time"]).strftime("%a %d %b %I:%M %p"), "favourite": fav, "underdog": dog,
+                                "fav −1.5 games": g, "fair": fair(g), "dog +1.5": 1 - g, "fair ": fair(1 - g),
+                                "fav −3.5 pts": p35, "fair  ": fair(p35), "dog +3.5": 1 - p35, "fair   ": fair(1 - p35), "exp margin": em})
+            if rows_sp:
+                st.dataframe(pd.DataFrame(rows_sp).style.format({"fav −1.5 games": "{:.0%}", "dog +1.5": "{:.0%}", "fav −3.5 pts": "{:.0%}",
+                                                                 "dog +3.5": "{:.0%}", "exp margin": "{:+.1f}"}), hide_index=True)
+                with st.expander("Check a DraftKings spread price"):
+                    opts = {f"{r['favourite']} v {r['underdog']} ({r['start_time']})": r for r in rows_sp}
+                    pick_sp = st.selectbox("Match", list(opts), key="sp_match")
+                    rr = opts[pick_sp]
+                    c1, c2 = st.columns(2)
+                    mkt = c1.selectbox("Market", [f"{rr['favourite']} −1.5 games", f"{rr['underdog']} +1.5 games",
+                                                  f"{rr['favourite']} −3.5 points", f"{rr['underdog']} +3.5 points"], key="sp_mkt")
+                    price = c2.text_input("DraftKings price", value="-110", key="sp_price")
+                    model_p = {0: rr["fav −1.5 games"], 1: rr["dog +1.5"], 2: rr["fav −3.5 pts"], 3: rr["dog +3.5"]}[
+                        [f"{rr['favourite']} −1.5 games", f"{rr['underdog']} +1.5 games", f"{rr['favourite']} −3.5 points", f"{rr['underdog']} +3.5 points"].index(mkt)]
+                    try:
+                        dec = dk.american_to_decimal(price)
+                        ev = model_p * (dec - 1) - (1 - model_p)
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("Model chance", f"{model_p:.0%}", f"fair {fair(model_p)}")
+                        m2.metric("Break-even at this price", f"{1 / dec:.0%}")
+                        m3.metric("EV per $1", f"{ev:+.2f}", "value" if ev > 0.03 else "pass")
+                    except Exception:
+                        st.caption("Enter an American price like -185 or +125.")
 
 
 # --------------------------------------------------------------------------- live (in-match)
@@ -557,6 +622,21 @@ with tab_h2h:
                     t1.metric("Model total points", f"{float(pr['exp_total_points']):.0f}")
                     t2.metric(f"{a} wins if takes game 1", f"{float(pr['p_a_if_g1']):.0%}")
                     t3.metric(f"{b} wins if takes game 1", f"{1 - float(pr['p_a_if_lost_g1']):.0%}")
+                if pd.notna(pr.get("p_a_pts_m35")):
+                    st.markdown("**Spreads** (chance each side covers, with the fair price)")
+                    rows_sp = [{"market": "Games −1.5 / +1.5", a: float(pr["p_a_games_m15"]), b: float(pr["p_b_games_m15"]),
+                                "note": f"{a} −1.5 = wins 3-0 or 3-1; {a} +1.5 = {1 - float(pr['p_b_games_m15']):.0%}"}]
+                    for L in M.Predictor.POINT_LINES:
+                        tag = str(L).replace(".", "")
+                        rows_sp.append({"market": f"Points −{L} / +{L}", a: float(pr[f"p_a_pts_m{tag}"]), b: float(pr[f"p_b_pts_m{tag}"]),
+                                        "note": f"{a} +{L} = {1 - float(pr[f'p_b_pts_m{tag}']):.0%} · {b} +{L} = {1 - float(pr[f'p_a_pts_m{tag}']):.0%}"})
+                    sp = pd.DataFrame(rows_sp)
+                    sp[f"{a} fair"] = sp[a].map(fair); sp[f"{b} fair"] = sp[b].map(fair)
+                    st.dataframe(sp[["market", a, f"{a} fair", b, f"{b} fair", "note"]].style.format({a: "{:.0%}", b: "{:.0%}"}),
+                                 hide_index=True)
+                    em = float(pr["exp_point_margin"])
+                    st.caption(f"Each −L column is that player giving L points (or games) and still winning by more. "
+                               f"Expected total-points margin: {a if em >= 0 else b} by {abs(em):.1f}.")
                 st.caption("Model prediction for this matchup if it were played in the chosen session today, both players "
                            "fresh. Fatigue and same-day load are set to zero; the live Today tab uses the real schedule.")
         c1, c2, c3 = st.columns(3)
@@ -656,6 +736,15 @@ with tab_track:
             q1.metric("Total points error (avg)", f"{ps['total_points_mae']:.1f}", f"typical total {ps['total_points_mean']:.0f}")
             q2.metric("Accuracy after game 1", f"{ps['after_game1_accuracy']:.1%}", f"{ps['after_game1_accuracy'] - ps['pre_match_accuracy_same']:+.1%} vs pre-match")
             q3.metric("Matches with points", ps["n"])
+        if "spreads" in s:
+            sp = s["spreads"]
+            st.subheader("Spreads (favourite −1.5 games, favourite −3.5 points)")
+            r1, r2, r3, r4 = st.columns(4)
+            r1.metric("Fav −1.5 games covers", f"{sp['games_m15_fav_cover_rate']:.1%}", f"model said {sp['games_m15_fav_pred']:.1%}")
+            r2.metric("…when model ≥60%", f"{sp['games_m15_hit_when_60plus']:.1%}", f"{sp['games_m15_calls_60plus']:,} calls")
+            r3.metric("Fav −3.5 points covers", f"{sp['points_m35_fav_cover_rate']:.1%}", f"model said {sp['points_m35_fav_pred']:.1%}")
+            r4.metric("…when model ≥60%", f"{sp['points_m35_hit_when_60plus']:.1%}", f"{sp['points_m35_calls_60plus']:,} calls")
+            st.caption(f"Average error on the total-points margin: {sp['point_margin_mae']:.1f} points over {sp['n']:,} matches.")
         if "games" in s:
             gs = s["games"]
             st.subheader("Number of games (total games 3.5 / 4.5)")

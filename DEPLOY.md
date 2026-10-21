@@ -85,6 +85,15 @@ line per match (`data/closing_lines.csv`) and, once 300 graded predictions have 
 blend (`models/market_blend.json`) shown on the cards as "Model × market blend". The ledger keeps grading the
 pure model so the two stay comparable.
 
+## Spreads (games ±1.5, points ±3.5)
+
+Every card, the H2H breakdown and the Pricing desk's "Spreads" table show the chance each side covers
+DraftKings' two spread markets, with the fair American price. Games −1.5 (wins 3-0 or 3-1) is a logistic on the
+match probability fitted at every retrain; the points spread comes from a winner/loser mixture of the total-points
+margin fitted on the vendor's game-by-game points (`spread_model` inside `models/model.joblib`; lines 3.5, 5.5 and
+7.5 are precomputed as `p_a_pts_m35` etc.). Both are checked on the walk-forward backtest ("Spreads" on the Track
+record tab). The "Check a DraftKings spread price" box turns a DK price into break-even % and EV per $1.
+
 ## DraftKings lines without a terminal: the "Copy DK lines" bookmark
 
 DraftKings' odds API refuses everything but its own web page (even Safari typing the API address gets "Access

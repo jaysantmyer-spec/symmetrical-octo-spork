@@ -128,6 +128,7 @@ def build_features(matches: pd.DataFrame, elo_k: float | None = None, with_bt: b
                "y": (1.0 if r.winner == "a" else 0.0 if r.winner == "b" else np.nan),
                "elo_p_a": _expected(pa.elo, pb.elo), "h2h_n": hn,
                "total_points": (float(r.points_a) + float(r.points_b)) if getattr(r, "n_games", None) is not None and not pd.isna(getattr(r, "n_games", np.nan)) else np.nan,
+               "point_margin": (float(r.points_a) - float(r.points_b)) if getattr(r, "n_games", None) is not None and not pd.isna(getattr(r, "n_games", np.nan)) else np.nan,
                "first_game_a": (1.0 if int(r.first_game_winner) == 1 else 0.0) if getattr(r, "first_game_winner", None) is not None and not pd.isna(getattr(r, "first_game_winner", np.nan)) else np.nan}
         for kf in DIFF_FEATURES:
             if kf == "bt":

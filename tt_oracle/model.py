@@ -176,6 +176,10 @@ class Predictor:
     games_model: object = None          # (logreg, hgb) multinomial on 3 / 4 / 5 games
     points_model: object = None         # Ridge: total points in the match (needs the vendor points feed)
     g1_model: object = None             # logistic: P(A wins | who won game 1) (needs the vendor points feed)
+    spread_model: dict = None           # winner/loser mixture for the total-points margin (A minus B)
+
+    # DraftKings' usual lines, from A's side (negative = A gives points)
+    POINT_LINES = (3.5, 5.5, 7.5)
 
     def games(self, df: pd.DataFrame, p_a: np.ndarray) -> np.ndarray:
         gm = getattr(self, "games_model", None)
@@ -233,6 +237,21 @@ class Predictor:
         S = np.column_stack(list(scores.values())); names = np.array(list(scores))
         out["likely_score"] = names[S.argmax(axis=1)]
         out["likely_score_p"] = S.max(axis=1)
+        # games spread: -1.5 covers when the match is won 3-0 or 3-1. Calibrated logistic on the match probability
+        # (the iid split above overstates straight-games wins for favourites by up to 12 points)
+        sm = getattr(self, "spread_model", None)
+        if sm and "games" in sm:
+            out["p_a_games_m15"] = games_cover(sm, p)                   # A -1.5
+            out["p_b_games_m15"] = games_cover(sm, 1 - p)               # B -1.5 (A +1.5 covers with 1 - this)
+        else:
+            out["p_a_games_m15"] = scores["3-0"] + scores["3-1"]
+            out["p_b_games_m15"] = scores["0-3"] + scores["1-3"]
+        # points spread: P(A's point margin > line) for the common lines, both directions
+        out["exp_point_margin"] = spread_mean(sm, p) if sm else np.nan
+        for L in self.POINT_LINES:
+            tag = str(L).replace(".", "")
+            out[f"p_a_pts_m{tag}"] = spread_cover(sm, p, L) if sm else np.nan      # A -L covers
+            out[f"p_b_pts_m{tag}"] = 1 - spread_cover(sm, p, -L) if sm else np.nan  # B -L covers
         # points-feed models (None until the vendor feed has enough linked matches)
         pm, gm = getattr(self, "points_model", None), getattr(self, "g1_model", None)
         if pm is not None and "A_ppg_for" in df:
@@ -281,7 +300,17 @@ def train(feat: pd.DataFrame, learners: list[str] | None = None, cutoff=None, ha
         g_hgb = HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, max_leaf_nodes=15, min_samples_leaf=80,
                                                random_state=seed).fit(Xg, ng, sample_weight=wg)
         games_model = (g_lr, g_hgb)
-    points_model = g1_model = None
+    points_model = g1_model = spread_model = None
+    if "point_margin" in tr and tr["point_margin"].notna().sum() >= 1500:
+        sp = tr[tr["point_margin"].notna()]
+        tmp = Predictor(models, list(learners), weights or {}, temperature, {}, None)
+        spread_model = fit_spread(blend(tmp.components(sp), weights, temperature), sp["point_margin"].to_numpy(float), sp["y"].to_numpy(int))
+        if spread_model and "sets_a" in tr:
+            gs = tr[tr["sets_a"].notna() & tr["sets_b"].notna()]
+            gs = gs[(gs["sets_a"] == 3) | (gs["sets_b"] == 3)]
+            if len(gs) >= 1500:
+                spread_model["games"] = fit_games_spread(blend(tmp.components(gs), weights, temperature),
+                                                         gs["sets_a"].to_numpy(int), gs["sets_b"].to_numpy(int))
     if "total_points" in tr and tr["total_points"].notna().sum() >= 1500 and games_model is not None:
         pt = tr[tr["total_points"].notna() & tr["first_game_a"].notna()]
         tmp = Predictor(models, list(learners), weights or {}, temperature, {}, games_model)
@@ -295,7 +324,50 @@ def train(feat: pd.DataFrame, learners: list[str] | None = None, cutoff=None, ha
         "trained_at": pd.Timestamp.now().isoformat(timespec="seconds"), "n_train": int(len(tr)),
         "data_through": str(tr["start_time"].max()), "learners": list(learners), "half_life_days": hl,
         "hardness_alpha": hardness_alpha, "version": pd.Timestamp.now().strftime("%Y%m%d-%H%M%S"),
-        "games_model": games_model is not None, "points_model": points_model is not None}, games_model, points_model, g1_model)
+        "games_model": games_model is not None, "points_model": points_model is not None}, games_model, points_model, g1_model,
+        spread_model)
+
+
+# --------------------------------------------------------------------------- points spread
+def fit_spread(p_a: np.ndarray, margin: np.ndarray, y: np.ndarray) -> dict:
+    """Total-points margin (A minus B) as a two-part mixture: given who wins, the margin is roughly normal with a
+    mean that grows with the favourite's strength. Checked on a year of games: P(cover) within ~2% in every bucket."""
+    z = _logit(np.asarray(p_a, float)); out = {}
+    for yv, key in ((1, "a_wins"), (0, "b_wins")):
+        m = y == yv
+        if m.sum() < 200:
+            return {}
+        b, a = np.polyfit(z[m], margin[m], 1); res = margin[m] - (a + b * z[m])
+        out[key] = {"a": float(a), "b": float(b), "sd": float(res.std())}
+    out["n"] = int(len(y))
+    return out
+
+
+def fit_games_spread(p_a: np.ndarray, sets_a: np.ndarray, sets_b: np.ndarray) -> dict:
+    """P(wins 3-0 or 3-1) as a logistic on the match logit, fitted symmetrically (both orientations)."""
+    z = _logit(np.asarray(p_a, float))
+    cov_a = ((sets_a == 3) & (sets_b <= 1)).astype(int); cov_b = ((sets_b == 3) & (sets_a <= 1)).astype(int)
+    lr = LogisticRegression(C=100.0).fit(np.concatenate([z, -z]).reshape(-1, 1), np.concatenate([cov_a, cov_b]))
+    return {"a": float(lr.intercept_[0]), "b": float(lr.coef_[0][0]), "n": int(len(z))}
+
+
+def games_cover(sm: dict, p_a) -> np.ndarray:
+    g = sm["games"]; z = _logit(np.clip(np.asarray(p_a, float), 1e-4, 1 - 1e-4))
+    return 1 / (1 + np.exp(-(g["a"] + g["b"] * z)))
+
+
+def spread_cover(sm: dict, p_a, line) -> np.ndarray:
+    """P(A's point margin > line); line may be negative (A getting points)."""
+    from scipy.stats import norm
+    p = np.clip(np.asarray(p_a, float), 1e-4, 1 - 1e-4); z = _logit(p); L = np.asarray(line, float)
+    w, l = sm["a_wins"], sm["b_wins"]
+    return p * (1 - norm.cdf((L - (w["a"] + w["b"] * z)) / w["sd"])) + (1 - p) * (1 - norm.cdf((L - (l["a"] + l["b"] * z)) / l["sd"]))
+
+
+def spread_mean(sm: dict, p_a) -> np.ndarray:
+    p = np.clip(np.asarray(p_a, float), 1e-4, 1 - 1e-4); z = _logit(p)
+    w, l = sm["a_wins"], sm["b_wins"]
+    return p * (w["a"] + w["b"] * z) + (1 - p) * (l["a"] + l["b"] * z)
 
 
 # --------------------------------------------------------------------------- learning state

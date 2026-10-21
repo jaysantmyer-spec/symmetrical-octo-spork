@@ -86,6 +86,12 @@ dk.snapshot_odds(odds)
 P = pipeline.predict_upcoming(pred)
 print(P[["player_a", "player_b", "p_a", "exp_total_points", "p_a_if_g1", "p_a_if_lost_g1"]].head(3).round(2).to_string(index=False))
 assert P["exp_total_points"].between(60, 130).all() and (P["p_a_if_g1"] > P["p_a_if_lost_g1"]).all()
+# spreads: games -1.5 is a sub-event of winning; points -3.5 cover is below the win chance and above the -7.5 cover
+assert pred.spread_model and (P["p_a_games_m15"] <= P["p_a"] + 1e-9).all() and (P["p_a_pts_m35"] < P["p_a"]).all()
+assert (P["p_a_pts_m75"] <= P["p_a_pts_m55"]).all() and (P["p_a_pts_m55"] <= P["p_a_pts_m35"]).all()
+assert P["p_a_pts_m35"].between(0.02, 0.98).all() and P["exp_point_margin"].abs().lt(40).all()
+assert ((P["exp_point_margin"] > 0) == (P["p_a"] > 0.5)).mean() > 0.9
+print("spreads OK", P[["p_a", "p_a_games_m15", "p_b_games_m15", "exp_point_margin", "p_a_pts_m35", "p_b_pts_m35"]].head(3).round(2).to_string(index=False))
 assert P["market_p_a"].notna().sum() == 2, P[["player_a", "player_b", "dk_odds_a", "market_p_a"]].head()
 pr = dk.price(P.head(3), 1000)
 print(pr[["player", "fair", "market", "dk", "edge", "stake", "bet"]].to_string(index=False))

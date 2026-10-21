@@ -230,7 +230,7 @@ def walk_forward(feat: pd.DataFrame, start, end=None, step_days: int = 7, learne
                       weights=weights, temperature=temp)
         P = mdl.predict(rows)
         P["sets_a"], P["sets_b"] = rows["sets_a"].to_numpy(), rows["sets_b"].to_numpy()
-        for c in ("total_points", "first_game_a"):
+        for c in ("total_points", "first_game_a", "point_margin"):
             P[c] = rows[c].to_numpy() if c in rows else np.nan
         P["train_cutoff"] = lo
         preds.append(P)
@@ -279,6 +279,22 @@ def summarize(bt: pd.DataFrame) -> dict:
                        "after_game1_accuracy": float(((cond >= 0.5) == (g1["y"] == 1)).mean()) if len(g1) else float("nan"),
                        "pre_match_accuracy_same": float(((g1["p_a"] >= 0.5) == (g1["y"] == 1)).mean()) if len(g1) else float("nan"),
                        "after_game1_log_loss": float(_ll(cond, g1["y"]).mean()) if len(g1) else float("nan")}
+    if "p_a_pts_m35" in bt and bt["p_a_pts_m35"].notna().sum() >= 50 and "point_margin" in bt:
+        sp = bt.dropna(subset=["p_a_pts_m35", "point_margin", "sets_a"])
+        gm = sp["p_a_games_m15"] >= sp["p_b_games_m15"]                                   # favourite's -1.5
+        g_cover = np.where(gm, (sp["sets_a"] == 3) & (sp["sets_b"] <= 1), (sp["sets_b"] == 3) & (sp["sets_a"] <= 1))
+        g_p = np.where(gm, sp["p_a_games_m15"], sp["p_b_games_m15"])
+        pm = sp["p_a_pts_m35"] >= sp["p_b_pts_m35"]                                       # favourite's -3.5
+        p_cover = np.where(pm, sp["point_margin"] > 3.5, sp["point_margin"] < -3.5)
+        p_p = np.where(pm, sp["p_a_pts_m35"], sp["p_b_pts_m35"])
+        s["spreads"] = {"n": int(len(sp)),
+                        "games_m15_fav_cover_rate": float(np.mean(g_cover)), "games_m15_fav_pred": float(np.mean(g_p)),
+                        "games_m15_hit_when_60plus": float(np.mean(g_cover[g_p >= 0.6])) if (g_p >= 0.6).any() else float("nan"),
+                        "games_m15_calls_60plus": int((g_p >= 0.6).sum()),
+                        "points_m35_fav_cover_rate": float(np.mean(p_cover)), "points_m35_fav_pred": float(np.mean(p_p)),
+                        "points_m35_hit_when_60plus": float(np.mean(p_cover[p_p >= 0.6])) if (p_p >= 0.6).any() else float("nan"),
+                        "points_m35_calls_60plus": int((p_p >= 0.6).sum()),
+                        "point_margin_mae": float((sp["exp_point_margin"] - sp["point_margin"]).abs().mean())}
     if "market_p_a" in bt and bt["market_p_a"].notna().sum() >= 30:
         mk = bt[bt["market_p_a"].notna()]
         s["market_accuracy"] = float(((mk["market_p_a"] >= 0.5) == mk["y"]).mean())
