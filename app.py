@@ -570,10 +570,6 @@ with tab_live:
             m2.metric(f"{b} wins", f"{res['p_b']:.0%}")
             m3.metric("Games", f"{res['games_a']}–{res['games_b']}", f"{k} played")
             m4.metric("Expected total points", f"{res['exp_total_points']:.0f}", f"{res['pts_so_far']} so far")
-            sc = pd.DataFrame({"final score (A–B)": list(res["scores"]), "probability": list(res["scores"].values())})
-            st.dataframe(sc.style.format({"probability": "{:.0%}"}), hide_index=True, height=min(300, 40 + 36 * len(sc)))
-            st.caption(f"Fair live price: {a} {dk.fair_american(res['p_a'])} · {b} {dk.fair_american(res['p_b'])}. "
-                       "Compare with DraftKings' live line; the model knows nothing about injuries, serve or momentum beyond the points.")
             # ---- live spreads from the same state
             st.markdown("**Live spreads** (chance each side covers from here, with the fair price)")
             extra_line = st.number_input("Add a points line DraftKings is showing (e.g. 9.5)", 0.5, 40.5, 9.5, 1.0, key="live_extra_line")
@@ -597,6 +593,11 @@ with tab_live:
             st.caption(f"Points so far: {a} {cur_margin:+d}. Expected final points margin: {a if em >= 0 else b} by {abs(em):.1f}. "
                        "−L = that player giving L games/points and still winning by more. Game margins are projected at the pair's "
                        "typical ±3.9 points per game, so the points spread is a rough guide late in a close match.")
+            st.markdown("**Final score**")
+            sc = pd.DataFrame({"final score (A–B)": list(res["scores"]), "probability": list(res["scores"].values())})
+            st.dataframe(sc.style.format({"probability": "{:.0%}"}), hide_index=True, height=min(300, 40 + 36 * len(sc)))
+            st.caption(f"Fair live price: {a} {dk.fair_american(res['p_a'])} · {b} {dk.fair_american(res['p_b'])}. "
+                       "Compare with DraftKings' live line; the model knows nothing about injuries, serve or momentum beyond the points.")
 
 # --------------------------------------------------------------------------- head to head
 with tab_h2h:
